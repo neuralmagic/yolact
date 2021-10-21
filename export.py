@@ -90,7 +90,7 @@ class ExportArgs:
     checkpoint: Path
     config: str
     recipe: str
-    convert_qat: bool
+    no_qat: bool
     batch_size: int
     image_shape: Iterable
     save_dir: Path
@@ -116,7 +116,7 @@ class ExportArgs:
         if self.name:
             self.name = Path(self.name)
         else:
-            self.name = self.checkpoint.with_suffix(".onnx").name
+            self.name = Path(self.checkpoint.with_suffix(".onnx").name)
 
         self.name = self.save_dir / f"{self.name.stem}.onnx"
         file_index = 1
@@ -162,10 +162,11 @@ def parse_args() -> ExportArgs:
     )
 
     parser.add_argument(
-        "--convert-qat",
-        "-Q",
+        "--no-qat",
+        "-N",
         action="store_true",
-        help="Flag to convert a QAT(Quantization Aware Training) graph",
+        help="Flag to prevent conversion of a QAT(Quantization Aware Training) "
+             "Graph to a Quantized Graph",
     )
 
     parser.add_argument(
@@ -223,7 +224,7 @@ def export(args: ExportArgs):
         module=model,
         sample_batch=torch.randn(*batch_shape),
         file_path=args.name,
-        convert_qat=args.convert_qat,
+        convert_qat=not args.no_qat,
     )
     logging.info(f"Model checkpoint exported to {args.name}")
 
