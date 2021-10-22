@@ -73,12 +73,12 @@ from typing import Iterable
 import torch
 
 from data import set_cfg
-from recipes.yolact import Yolact
+from yolact import Yolact
 from sparseml.pytorch.optim import ScheduledModifierManager
 from sparseml.pytorch.utils import export_onnx
 
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 
 
 @dataclass
@@ -118,12 +118,12 @@ class ExportArgs:
         else:
             self.name = Path(self.checkpoint.with_suffix(".onnx").name)
 
-        self.name = self.save_dir / f"{self.name.stem}.onnx"
-        file_index = 1
+        filename = self.name.stem
+        self.name = self.save_dir / f"{filename}.onnx"
+        existence_counter = 0
         while self.name.exists():
-            base_name = f"{self.name.stem}_{file_index}.onnx"
-            self.name = self.name.parent / base_name
-            file_index += 1
+            existence_counter += 1
+            self.name = self.name.parent / f"{filename}-{existence_counter}.onnx"
         return self.name
 
 
@@ -223,7 +223,7 @@ def export(args: ExportArgs):
     export_onnx(
         module=model,
         sample_batch=torch.randn(*batch_shape),
-        file_path=args.name,
+        file_path=str(args.name),
         convert_qat=not args.no_qat,
     )
     logging.info(f"Model checkpoint exported to {args.name}")
