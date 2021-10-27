@@ -1,9 +1,16 @@
+import logging
+
+from sparseml.pytorch.utils import TensorBoardLogger
+from torch.cuda import amp
+
 from data import *
 from utils.augmentations import SSDAugmentation, BaseTransform
 from utils.functions import MovingAverage, SavePath
 from utils.logger import Log
 from utils import timer
 from layers.modules import MultiBoxLoss
+from utils.sparse import SparseMLWrapper
+from utils.zoo import is_valid_stub, download_checkpoint_from_stub
 from yolact import Yolact
 import os
 import sys
@@ -20,10 +27,11 @@ import torch.utils.data as data
 import numpy as np
 import argparse
 import datetime
+import tempfile
 
 # Oof
 import eval as eval_script
-
+logger = logging.getLogger(__name__)
 def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
 
@@ -34,7 +42,7 @@ parser.add_argument('--batch_size', default=8, type=int,
                     help='Batch size for training')
 parser.add_argument('--resume', default=None, type=str,
                     help='Checkpoint state_dict file to resume training from. If this is "interrupt"'\
-                         ', the model will resume training from the interrupt file.')
+                         ', the model will resume training from the interrupt file, can also be SparseZoo model stub')
 parser.add_argument('--start_iter', default=-1, type=int,
                     help='Resume training at this iter. If this is -1, the iteration will be'\
                          'determined from the file name.')
@@ -78,6 +86,12 @@ parser.add_argument('--batch_alloc', default=None, type=str,
                     help='If using multiple GPUS, you can set this to be a comma separated list detailing which GPUs should get what local batch size (It should add up to your total batch size).')
 parser.add_argument('--no_autoscale', dest='autoscale', action='store_false',
                     help='YOLACT will automatically scale the lr and the number of iterations depending on the batch size. Set this if you want to disable that.')
+parser.add_argument('--recipe', type=str, default=None,
+                    help="Path to a sparsification recipe, can also be a "
+                         "SparseZoo recipe stub")
+parser.add_argument('--fp16',
+                    action='store_true',
+                    help ='flag to switch on fp16 while training')
 
 parser.set_defaults(keep_latest=False, log=True, log_gpu=False, interrupt=True, autoscale=True)
 args = parser.parse_args()
@@ -201,16 +215,30 @@ def train():
         args.resume = SavePath.get_interrupt(args.save_folder)
     elif args.resume == 'latest':
         args.resume = SavePath.get_latest(args.save_folder, cfg.name)
+    elif args.resume and is_valid_stub(args.resume):
+        args.resume = download_checkpoint_from_stub(args.resume)
+
 
     if args.resume is not None:
-        print('Resuming training, loading {}...'.format(args.resume))
-        yolact_net.load_weights(args.resume)
+        print('Resuming training, loading checkpoint {}...'.format(args.resume))
+        start_epoch, recipe = yolact_net.load_checkpoint(args.resume)
+        recipe_temp_file = None
+        if recipe:
+            recipe_temp_file = tempfile.NamedTemporaryFile()
+            with open(recipe_temp_file.name, 'w') as f:
+                f.write(recipe)
 
+        recipe_path = recipe_temp_file.name if recipe_temp_file else None
+        args.recipe = args.recipe or recipe_path
         if args.start_iter == -1:
             args.start_iter = SavePath.from_str(args.resume).iteration
     else:
         print('Initializing weights...')
         yolact_net.init_weights(backbone_path=args.save_folder + cfg.backbone.path)
+        start_epoch= 0
+
+    sparseml_wrapper = SparseMLWrapper(yolact_net, args.recipe)
+    sparseml_wrapper.initialize(start_epoch=start_epoch)
 
     optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=args.momentum,
                           weight_decay=args.decay)
@@ -242,7 +270,10 @@ def train():
 
     epoch_size = len(dataset) // args.batch_size
     num_epochs = math.ceil(cfg.max_iter / epoch_size)
-    
+
+    print("num epochs: " + str(num_epochs))
+    print("steps: " + str(cfg.max_iter ))
+
     # Which learning rate adjustment step are we on? lr' = lr * gamma ^ step_index
     step_index = 0
 
@@ -261,8 +292,22 @@ def train():
     print('Begin training!')
     print()
     # try-except so you can use ctrl+c to save early and stop training
+    # SparseML Integration
+    half_precision = args.fp16 and args.device != 'cpu'
+    scaler = amp.GradScaler(enabled=half_precision)
+    sparseml_wrapper.initialize_loggers(logger, tb_writer=TensorBoardLogger,
+                                        wandb_logger=None, rank=-1)
+    scaler = sparseml_wrapper.modify(scaler, optimizer, net, data_loader)
+    scheduler = sparseml_wrapper.check_lr_override(scheduler=None)
+    num_epochs = sparseml_wrapper.check_epoch_override(num_epochs)
     try:
-        for epoch in range(num_epochs):
+        for epoch in range(start_epoch, num_epochs):
+            if sparseml_wrapper.qat_active(epoch):
+                logger.info(
+                    'Disabling half precision, QAT scheduled to run'
+                    )
+                scaler._enabled = False
+
             # Resume from start_iter
             if (epoch+1)*epoch_size < iteration:
                 continue
@@ -303,19 +348,24 @@ def train():
                 # Zero the grad to get ready to compute gradients
                 optimizer.zero_grad()
 
-                # Forward Pass + Compute loss at the same time (see CustomDataParallel and NetLoss)
-                losses = net(datum)
+
+                with amp.autocast(enabled=half_precision):
+                    # Forward Pass + Compute loss at the same time (see CustomDataParallel and NetLoss)
+                    losses = net(datum)
                 
-                losses = { k: (v).mean() for k,v in losses.items() } # Mean here because Dataparallel
-                loss = sum([losses[k] for k in losses])
+                    losses = { k: (v).mean() for k,v in losses.items() } # Mean here because Dataparallel
+                    loss = sum([losses[k] for k in losses])
                 
                 # no_inf_mean removes some components from the loss, so make sure to backward through all of it
                 # all_loss = sum([v.mean() for v in losses.values()])
 
                 # Backprop
-                loss.backward() # Do this to free up vram even if loss is not finite
+                scaler.scale(loss).backward() # Do this to free up vram even if
+                # loss is not finite
                 if torch.isfinite(loss).item():
-                    optimizer.step()
+                    scaler.step(optimizer)
+                    scaler.update()
+                    optimizer.zero_grad()
                 
                 # Add the loss to the moving average for bookkeeping
                 for k in losses:
@@ -358,7 +408,10 @@ def train():
                         latest = SavePath.get_latest(args.save_folder, cfg.name)
 
                     print('Saving state, iter:', iteration)
-                    yolact_net.save_weights(save_path(epoch, iteration))
+                    yolact_net.save_checkpoint(
+                        save_path(epoch, iteration),
+                        recipe=sparseml_wrapper.state_dict().get('recipe'),
+                        epoch=epoch)
 
                     if args.keep_latest and latest is not None:
                         if args.keep_latest_interval <= 0 or iteration % args.keep_latest_interval != args.save_interval:
@@ -379,10 +432,21 @@ def train():
             # Delete previous copy of the interrupted network so we don't spam the weights folder
             SavePath.remove_interrupt(args.save_folder)
             
-            yolact_net.save_weights(save_path(epoch, repr(iteration) + '_interrupt'))
+            yolact_net.save_checkpoint(
+                save_path(epoch, repr(iteration) +'_interrupt'),
+                recipe=sparseml_wrapper.state_dict().get('recipe'),
+                epoch=epoch,
+            )
+        if recipe_temp_file: recipe_temp_file.close()
         exit()
 
-    yolact_net.save_weights(save_path(epoch, iteration))
+    yolact_net.save_checkpoint(
+        save_path(epoch, iteration),
+        recipe=sparseml_wrapper.state_dict().get('recipe'),
+        epoch=epoch,
+    )
+    if recipe_temp_file: recipe_temp_file.close()
+
 
 
 def set_lr(optimizer, new_lr):
