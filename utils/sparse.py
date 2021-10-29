@@ -56,7 +56,7 @@ class SparseMLWrapper(object):
                 ]
             )
 
-            if wandb_logger.wandb:
+            if wandb_logger and wandb_logger.wandb:
                 artifact = wandb_logger.wandb.Artifact('recipe', type='recipe')
                 with artifact.new_file('recipe.yaml') as file:
                     file.write(str(self.manager))
