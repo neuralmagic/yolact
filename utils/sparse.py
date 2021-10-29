@@ -75,13 +75,16 @@ class SparseMLWrapper(object):
 
     def check_lr_override(self, scheduler):
         # Override lr scheduler if recipe makes any LR updates
-        if self.enabled and self.manager.learning_rate_modifiers:
+        if self.should_override_scheduler():
             self.logger.info(
                 'Disabling LR scheduler, managing LR using SparseML recipe'
                 )
             scheduler = None
 
         return scheduler
+
+    def should_override_scheduler(self):
+        return self.enabled and self.manager.learning_rate_modifiers
 
     def check_epoch_override(self, epochs):
         # Override num epochs if recipe explicitly modifies epoch range

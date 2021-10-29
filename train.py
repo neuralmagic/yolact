@@ -88,7 +88,12 @@ parser.add_argument('--no_autoscale', dest='autoscale', action='store_false',
                     help='YOLACT will automatically scale the lr and the number of iterations depending on the batch size. Set this if you want to disable that.')
 parser.add_argument('--recipe', type=str, default=None,
                     help="Path to a sparsification recipe, can also be a "
-                         "SparseZoo recipe stub")
+                         "SparseZoo recipe stub, if provided the recipe "
+                         "stored with the checkpoint is ignored")
+parser.add_argument('--override-checkpoint-epoch',
+                    action="store_true",
+                    help="Flag to override epoch saved in the checkpoint. "
+                )
 parser.add_argument('--fp16',
                     action='store_true',
                     help ='flag to switch on fp16 while training')
@@ -221,15 +226,9 @@ def train():
 
     if args.resume is not None:
         print('Resuming training, loading checkpoint {}...'.format(args.resume))
-        start_epoch, recipe = yolact_net.load_checkpoint(args.resume)
-        recipe_temp_file = None
-        if recipe:
-            recipe_temp_file = tempfile.NamedTemporaryFile()
-            with open(recipe_temp_file.name, 'w') as f:
-                f.write(recipe)
-
-        recipe_path = recipe_temp_file.name if recipe_temp_file else None
-        args.recipe = args.recipe or recipe_path
+        checkpoint_epoch, checkpoint_recipe = yolact_net.load_checkpoint(args.resume)
+        start_epoch = 0 if args.override_checkpoint_epoch else checkpoint_epoch
+        args.recipe = args.recipe or checkpoint_recipe
         if args.start_iter == -1:
             args.start_iter = SavePath.from_str(args.resume).iteration
     else:
@@ -337,11 +336,19 @@ def train():
                     cfg.delayed_settings = [x for x in cfg.delayed_settings if x[0] > iteration]
 
                 # Warm up by linearly interpolating the learning rate from some smaller value
-                if cfg.lr_warmup_until > 0 and iteration <= cfg.lr_warmup_until:
+
+                needs_manual_lr_update = (
+                                                 cfg.lr_warmup_until > 0 and
+                                          iteration <=cfg.lr_warmup_until and
+                                not sparseml_wrapper.should_override_scheduler()
+                )
+                if needs_manual_lr_update:
                     set_lr(optimizer, (args.lr - cfg.lr_warmup_init) * (iteration / cfg.lr_warmup_until) + cfg.lr_warmup_init)
 
                 # Adjust the learning rate at the given iterations, but also if we resume from past that iteration
-                while step_index < len(cfg.lr_steps) and iteration >= cfg.lr_steps[step_index]:
+                while not sparseml_wrapper.should_override_scheduler() and \
+                        step_index < len(cfg.lr_steps) and iteration >= \
+                        cfg.lr_steps[step_index]:
                     step_index += 1
                     set_lr(optimizer, args.lr * (args.gamma ** step_index))
                 
@@ -437,7 +444,6 @@ def train():
                 recipe=sparseml_wrapper.state_dict().get('recipe'),
                 epoch=epoch,
             )
-        if recipe_temp_file: recipe_temp_file.close()
         exit()
 
     yolact_net.save_checkpoint(
@@ -445,7 +451,6 @@ def train():
         recipe=sparseml_wrapper.state_dict().get('recipe'),
         epoch=epoch,
     )
-    if recipe_temp_file: recipe_temp_file.close()
 
 
 
