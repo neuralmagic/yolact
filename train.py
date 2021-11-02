@@ -13,21 +13,14 @@ from utils.sparse import SparseMLWrapper
 from utils.zoo import is_valid_stub, download_checkpoint_from_stub
 from yolact import Yolact
 import os
-import sys
 import time
 import math, random
-from pathlib import Path
 import torch
-from torch.autograd import Variable
 import torch.nn as nn
 import torch.optim as optim
-import torch.backends.cudnn as cudnn
-import torch.nn.init as init
 import torch.utils.data as data
-import numpy as np
 import argparse
 import datetime
-import tempfile
 
 # Oof
 import eval as eval_script
@@ -42,7 +35,11 @@ parser.add_argument('--batch_size', default=8, type=int,
                     help='Batch size for training')
 parser.add_argument('--resume', default=None, type=str,
                     help='Checkpoint state_dict file to resume training from. If this is "interrupt"'\
-                         ', the model will resume training from the interrupt file, can also be SparseZoo model stub')
+                         ', the model will resume training from the interrupt file. Can also be set to True;'
+                        'along with the --ckpt argument to resume training from a SparseZoo stub or local checkpoint'
+                    )
+parser.add_argument('--ckpt', type=str, default=None,
+                    help="Path to a Yolact checkpoint/SparseZoo stub used only if --resume is True")
 parser.add_argument('--start_iter', default=-1, type=int,
                     help='Resume training at this iter. If this is -1, the iteration will be'\
                          'determined from the file name.')
@@ -89,14 +86,17 @@ parser.add_argument('--no_autoscale', dest='autoscale', action='store_false',
 parser.add_argument('--recipe', type=str, default=None,
                     help="Path to a sparsification recipe, can also be a "
                          "SparseZoo recipe stub, if provided the recipe "
-                         "stored with the checkpoint is ignored")
-parser.add_argument('--override-checkpoint-epoch',
-                    action="store_true",
-                    help="Flag to override epoch saved in the checkpoint. "
-                )
+                         "stored with the checkpoint is ignored"
+                    )
+parser.add_argument('--override_checkpoint_epoch',
+                    default=True,
+                    type=bool,
+                    help="Boolean Flag to override epoch saved in the checkpoint"
+                    )
 parser.add_argument('--fp16',
                     action='store_true',
-                    help ='flag to switch on fp16 while training')
+                    help ='flag to switch on fp16 while training'
+                    )
 
 parser.set_defaults(keep_latest=False, log=True, log_gpu=False, interrupt=True, autoscale=True)
 args = parser.parse_args()
@@ -220,14 +220,18 @@ def train():
         args.resume = SavePath.get_interrupt(args.save_folder)
     elif args.resume == 'latest':
         args.resume = SavePath.get_latest(args.save_folder, cfg.name)
-    elif args.resume and is_valid_stub(args.resume):
-        args.resume = download_checkpoint_from_stub(args.resume)
+    elif args.resume in ['True', '1']:
+        if is_valid_stub(args.ckpt):
+            args.resume = download_checkpoint_from_stub(args.ckpt)
+        else:
+            args.resume = args.ckpt
 
-
-    if args.resume is not None:
+    if args.resume is not [None, 'False', '0']:
         print('Resuming training, loading checkpoint {}...'.format(args.resume))
         checkpoint_epoch, checkpoint_recipe = yolact_net.load_checkpoint(args.resume)
-        start_epoch = 0 if args.override_checkpoint_epoch else checkpoint_epoch
+        start_epoch = 0
+        if checkpoint_epoch and checkpoint_recipe: start_epoch = checkpoint_epoch
+        if args.override_checkpoint_epoch: start_epoch = 0
         args.recipe = args.recipe or checkpoint_recipe
         if args.start_iter == -1:
             args.start_iter = SavePath.from_str(args.resume).iteration
@@ -239,7 +243,7 @@ def train():
     sparseml_wrapper = SparseMLWrapper(yolact_net, args.recipe)
     sparseml_wrapper.initialize(start_epoch=start_epoch)
 
-    optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=args.momentum,
+    optimizer = optim.SGD(yolact_net.parameters(), lr=args.lr, momentum=args.momentum,
                           weight_decay=args.decay)
     criterion = MultiBoxLoss(num_classes=cfg.num_classes,
                              pos_threshold=cfg.positive_iou_threshold,
@@ -296,8 +300,7 @@ def train():
     scaler = amp.GradScaler(enabled=half_precision)
     sparseml_wrapper.initialize_loggers(logger, tb_writer=TensorBoardLogger,
                                         wandb_logger=None, rank=-1)
-    scaler = sparseml_wrapper.modify(scaler, optimizer, net, data_loader)
-    scheduler = sparseml_wrapper.check_lr_override(scheduler=None)
+    scaler = sparseml_wrapper.modify(scaler, optimizer, yolact_net, data_loader)
     num_epochs = sparseml_wrapper.check_epoch_override(num_epochs)
     try:
         for epoch in range(start_epoch, num_epochs):
@@ -306,6 +309,7 @@ def train():
                     'Disabling half precision, QAT scheduled to run'
                     )
                 scaler._enabled = False
+                half_precision = False
 
             # Resume from start_iter
             if (epoch+1)*epoch_size < iteration:
