@@ -91,7 +91,7 @@ parser.add_argument('--recipe', type=str, default=None,
 parser.add_argument('--override_checkpoint_epoch',
                     default=True,
                     type=bool,
-                    help="Boolean Flag to override epoch saved in the checkpoint"
+                    help="True to to override epoch # saved in the checkpoint and start from 0"
                     )
 parser.add_argument('--fp16',
                     action='store_true',
@@ -220,13 +220,13 @@ def train():
         args.resume = SavePath.get_interrupt(args.save_folder)
     elif args.resume == 'latest':
         args.resume = SavePath.get_latest(args.save_folder, cfg.name)
-    elif args.resume in ['True', '1']:
+    elif str2bool(args.resume):
         if is_valid_stub(args.ckpt):
             args.resume = download_checkpoint_from_stub(args.ckpt)
         else:
             args.resume = args.ckpt
 
-    if args.resume is not [None, 'False', '0']:
+    if args.resume and args.resume.lower() not in ("no", "false", "f", "0"):
         print('Resuming training, loading checkpoint {}...'.format(args.resume))
         checkpoint_epoch, checkpoint_recipe = yolact_net.load_checkpoint(args.resume)
         start_epoch = 0
@@ -274,8 +274,6 @@ def train():
     epoch_size = len(dataset) // args.batch_size
     num_epochs = math.ceil(cfg.max_iter / epoch_size)
 
-    print("num epochs: " + str(num_epochs))
-    print("steps: " + str(cfg.max_iter ))
 
     # Which learning rate adjustment step are we on? lr' = lr * gamma ^ step_index
     step_index = 0
@@ -302,6 +300,11 @@ def train():
                                         wandb_logger=None, rank=-1)
     scaler = sparseml_wrapper.modify(scaler, optimizer, yolact_net, data_loader)
     num_epochs = sparseml_wrapper.check_epoch_override(num_epochs)
+
+    max_steps = cfg.max_iter
+    print(f"num epochs: {num_epochs}")
+    print(f"Steps to train: {(num_epochs - start_epoch) * len(data_loader)}" )
+
     try:
         for epoch in range(start_epoch, num_epochs):
             if sparseml_wrapper.qat_active(epoch):
@@ -334,7 +337,7 @@ def train():
                         # Reset the loss averages because things might have changed
                         for avg in loss_avgs:
                             avg.reset()
-                
+
                 # If a config setting was changed, remove it from the list so we don't keep checking
                 if changed:
                     cfg.delayed_settings = [x for x in cfg.delayed_settings if x[0] > iteration]
@@ -355,7 +358,7 @@ def train():
                         cfg.lr_steps[step_index]:
                     step_index += 1
                     set_lr(optimizer, args.lr * (args.gamma ** step_index))
-                
+
                 # Zero the grad to get ready to compute gradients
                 optimizer.zero_grad()
 
@@ -363,21 +366,19 @@ def train():
                 with amp.autocast(enabled=half_precision):
                     # Forward Pass + Compute loss at the same time (see CustomDataParallel and NetLoss)
                     losses = net(datum)
-                
                     losses = { k: (v).mean() for k,v in losses.items() } # Mean here because Dataparallel
                     loss = sum([losses[k] for k in losses])
-                
+
                 # no_inf_mean removes some components from the loss, so make sure to backward through all of it
                 # all_loss = sum([v.mean() for v in losses.values()])
 
                 # Backprop
-                scaler.scale(loss).backward() # Do this to free up vram even if
-                # loss is not finite
+                scaler.scale(loss).backward() # Do this to free up vram even if loss is not finite
                 if torch.isfinite(loss).item():
                     scaler.step(optimizer)
                     scaler.update()
                     optimizer.zero_grad()
-                
+
                 # Add the loss to the moving average for bookkeeping
                 for k in losses:
                     loss_avgs[k].add(losses[k].item())
@@ -391,11 +392,16 @@ def train():
                     time_avg.add(elapsed)
 
                 if iteration % 10 == 0:
-                    eta_str = str(datetime.timedelta(seconds=(cfg.max_iter-iteration) * time_avg.get_avg())).split('.')[0]
-                    
+                    remaining_epoch_iterations = len(data_loader) - (iteration % len(data_loader))
+                    remaining_complete_epochs = (num_epochs - epoch - 1)
+                    remaining_iterations = remaining_epoch_iterations + remaining_complete_epochs * len(data_loader)
+                    eta_current_setup = datetime.timedelta(seconds=((remaining_iterations * time_avg.get_avg())))
+                    eta_max = datetime.timedelta(seconds=((max_steps - iteration) * time_avg.get_avg()))
+
+                    eta_str = str(min(eta_current_setup, eta_max)).split('.')[0]
                     total = sum([loss_avgs[k].get_avg() for k in losses])
                     loss_labels = sum([[k, loss_avgs[k].get_avg()] for k in loss_types if k in losses], [])
-                    
+
                     print(('[%3d] %7d ||' + (' %s: %.3f |' * len(losses)) + ' T: %.3f || ETA: %s || timer: %.3f')
                             % tuple([epoch, iteration] + loss_labels + [total, eta_str, elapsed]), flush=True)
 
@@ -406,12 +412,12 @@ def train():
 
                     if args.log_gpu:
                         log.log_gpu_stats = (iteration % 10 == 0) # nvidia-smi is sloooow
-                        
+
                     log.log('train', loss=loss_info, epoch=epoch, iter=iteration,
                         lr=round(cur_lr, 10), elapsed=elapsed)
 
                     log.log_gpu_stats = args.log_gpu
-                
+
                 iteration += 1
 
                 if iteration % args.save_interval == 0 and iteration != args.start_iter:
@@ -433,8 +439,9 @@ def train():
             if args.validation_epoch > 0:
                 if epoch % args.validation_epoch == 0 and epoch > 0:
                     compute_validation_map(epoch, iteration, yolact_net, val_dataset, log if args.log else None)
-        
+
         # Compute validation mAP after training is finished
+        print("Computing val mAP after training:")
         compute_validation_map(epoch, iteration, yolact_net, val_dataset, log if args.log else None)
     except KeyboardInterrupt:
         if args.interrupt:
