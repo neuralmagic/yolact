@@ -476,7 +476,7 @@ class Yolact(nn.Module):
                          'epoch': epoch,
                          'model_state_dict': self.state_dict(),
                          'recipe': recipe,
-                     },
+                     }
         torch.save(checkpoint, path)
 
     def load_checkpoint(self, path) -> Tuple[Optional[int], Optional[str]]:
