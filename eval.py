@@ -1,4 +1,7 @@
+import contextlib
+
 from data import COCODetection, get_label_map, MEANS, COLORS
+from utils.wrapper import DeepsparseWrapper
 from yolact import Yolact
 from utils.augmentations import BaseTransform, FastBaseTransform, Resize
 from utils.functions import MovingAverage, ProgressBar
@@ -28,6 +31,10 @@ from PIL import Image
 
 import matplotlib.pyplot as plt
 import cv2
+deepsparse_available = False
+with contextlib.suppress(Exception):
+    import deepsparse
+    deepsparse_available = True
 
 def str2bool(v):
     if v.lower() in ('yes', 'true', 't', 'y', '1'):
@@ -177,7 +184,7 @@ def prep_display(dets_out, img, h, w, undo_transform=True, class_color=False, ma
             color = COLORS[color_idx]
             if not undo_transform:
                 # The image might come in as RGB or BRG, depending
-                color = (color[2], color[1], color[0])
+                color = torch.tensor((color[2], color[1], color[0]))
             if on_gpu is not None:
                 color = torch.Tensor(color).to(on_gpu).float() / 255.
                 color_cache[on_gpu][color_idx] = color
@@ -191,8 +198,9 @@ def prep_display(dets_out, img, h, w, undo_transform=True, class_color=False, ma
         masks = masks[:num_dets_to_consider, :, :, None]
         
         # Prepare the RGB images for each mask given their color (size [num_dets, h, w, 1])
-        colors = torch.cat([get_color(j, on_gpu=img_gpu.device.index).view(1, 1, 1, 3) for j in range(num_dets_to_consider)], dim=0)
+        colors = torch.cat([get_color(j, on_gpu=img_gpu.device.index).view(1, 1, 1, 3) for j in range(num_dets_to_consider)], dim=0).to(device)
         masks_color = masks.repeat(1, 1, 1, 3) * colors * mask_alpha
+        masks_color.to(device)
 
         # This is 1 everywhere except for 1-mask_alpha where the mask is
         inv_alph_masks = masks * (-mask_alpha) + 1
@@ -206,7 +214,7 @@ def prep_display(dets_out, img, h, w, undo_transform=True, class_color=False, ma
             masks_color_cumul = masks_color[1:] * inv_alph_cumul
             masks_color_summand += masks_color_cumul.sum(dim=0)
 
-        img_gpu = img_gpu * inv_alph_masks.prod(dim=0) + masks_color_summand
+        img_gpu = img_gpu.to(device) * inv_alph_masks.prod(dim=0) + masks_color_summand
     
     if args.display_fps:
             # Draw the box for the fps on the GPU
@@ -238,7 +246,7 @@ def prep_display(dets_out, img, h, w, undo_transform=True, class_color=False, ma
             x1, y1, x2, y2 = boxes[j, :]
             color = get_color(j)
             score = scores[j]
-
+            color = [int(x) for x in color]
             if args.display_bboxes:
                 cv2.rectangle(img_numpy, (x1, y1), (x2, y2), color, 1)
 
@@ -658,8 +666,10 @@ def evalvideo(net:Yolact, path:str, out_path:str=None):
     else:
         num_frames = round(vid.get(cv2.CAP_PROP_FRAME_COUNT))
 
-    net = CustomDataParallel(net).cuda()
-    transform = torch.nn.DataParallel(FastBaseTransform()).cuda()
+    transform = FastBaseTransform()
+    if args.cuda:
+        net = CustomDataParallel(net).cuda()
+        transform = torch.nn.DataParallel(transform).cuda()
     frame_times = MovingAverage(100)
     fps = 0
     frame_time_target = 1 / target_fps
@@ -1048,7 +1058,8 @@ def print_maps(all_maps):
 
 if __name__ == '__main__':
     parse_args()
-
+    run_deepsparse = args.trained_model.endswith('.onnx') or args.startswith('zoo')
+    if deepsparse_available and run_deepsparse: args.cuda = False
     if args.config is not None:
         set_cfg(args.config)
 
@@ -1094,9 +1105,15 @@ if __name__ == '__main__':
             dataset = None        
 
         print('Loading model...', end='')
-        net = Yolact()
-        net.load_weights(args.trained_model)
-        net.eval()
+
+        if deepsparse_available and run_deepsparse:
+            net = DeepsparseWrapper(filepath=args.trained_model, cfg=cfg)
+            global device
+            device = 'cpu'
+        else:
+            net = Yolact()
+            net.load_checkpoint(args.trained_model)
+            net.eval()
         print(' Done.')
 
         if args.cuda:
