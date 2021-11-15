@@ -1,13 +1,20 @@
+import contextlib
 import math
 
 import torch.nn as nn
 from sparseml.pytorch.optim import ScheduledModifierManager
 from sparseml.pytorch.utils import SparsificationGroupLogger
 
+wandb_available = False
+with contextlib.suppress(ModuleNotFoundError):
+    import wandb
+
+    wandb_available = True
+
 
 def is_parallel(model):
     return type(model) in (
-    nn.parallel.DataParallel, nn.parallel.DistributedDataParallel)
+        nn.parallel.DataParallel, nn.parallel.DistributedDataParallel)
 
 
 class SparseMLWrapper(object):
@@ -17,7 +24,7 @@ class SparseMLWrapper(object):
         self.recipe = recipe
         self.manager = ScheduledModifierManager.from_yaml(
             recipe
-            ) if self.enabled else None
+        ) if self.enabled else None
         self.logger = None
 
     def state_dict(self):
@@ -35,18 +42,32 @@ class SparseMLWrapper(object):
 
     def initialize_loggers(self, logger, tb_writer, wandb_logger, rank):
         self.logger = logger
+        if not self.enabled or rank not in [-1, 0]:
+            return
 
-        if self.enabled and rank in [-1, 0]:
-            self.manager.initialize_loggers(
-                [
-                    SparsificationGroupLogger(
-                        tensorboard=tb_writer,
-                        wandb_={'project': 'yolact'} if wandb_logger else None
+        def _logging_lambda(log_tag, log_val, log_vals, step, walltime):
+            if not wandb_logger or not wandb_available:
+                return
 
-                    ),
+            if log_val is not None:
+                wandb.log({log_tag: log_val})
 
-                ]
+            if log_vals:
+                wandb.log(log_vals)
+
+        self.manager.initialize_loggers([
+            SparsificationGroupLogger(
+                lambda_func=_logging_lambda,
+                tensorboard=tb_writer,
+                wandb_={'project': 'yolact'}
             )
+        ])
+
+        if wandb_logger and wandb_available:
+            artifact = wandb.Artifact('recipe', type='recipe')
+            with artifact.new_file('recipe.yaml') as file:
+                file.write(str(self.manager))
+            wandb.log_artifact(artifact)
 
     def modify(self, scaler, optimizer, model, dataloader):
         if self.enabled:
@@ -64,7 +85,7 @@ class SparseMLWrapper(object):
         if self.should_override_scheduler():
             self.logger.info(
                 'Disabling LR scheduler, managing LR using SparseML recipe'
-                )
+            )
             scheduler = None
 
         return scheduler
@@ -79,7 +100,7 @@ class SparseMLWrapper(object):
             epochs = self.manager.max_epochs or epochs  # override num_epochs
             self.logger.info(
                 f'Overriding number of epochs from SparseML manager to {epochs}'
-                )
+            )
 
         return epochs
 
@@ -87,9 +108,8 @@ class SparseMLWrapper(object):
         if self.enabled and self.manager.quantization_modifiers:
             qat_start = min(
                 [mod.start_epoch for mod in self.manager.quantization_modifiers]
-                )
+            )
 
             return qat_start < epoch + 1
 
         return False
-
