@@ -514,7 +514,8 @@ class Yolact(nn.Module):
 
                 loaded = True
             sparseml_wrapper.initialize(start_epoch=epoch or 0 if resume else 0)
-        if not loaded: self.load_state_dict(state_dict=state_dict)
+        if not loaded:
+            self.load_state_dict(state_dict=state_dict)
         return epoch or 0, recipe, sparseml_wrapper
 
     def init_weights(self, backbone_path):

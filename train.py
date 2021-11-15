@@ -93,9 +93,9 @@ parser.add_argument('--override_checkpoint_epoch',
                     type=bool,
                     help="True to to override epoch # saved in the checkpoint and start from 0"
                     )
-parser.add_argument('--fp16',
+parser.add_argument('--disable_fp16',
                     action='store_true',
-                    help ='flag to switch on fp16 while training'
+                    help ='flag to switch off fp16 while training'
                     )
 parser.add_argument('--wandb', action='store_true', help="Flag to use wandb logging")
 parser.add_argument('--cont', action='store_true', help="Flag to continue application of a halted recipe.")
@@ -232,7 +232,7 @@ def train():
         print('Resuming training, loading checkpoint {}...'.format(args.resume))
         checkpoint_epoch, checkpoint_recipe, sparseml_wrapper = yolact_net.load_checkpoint(args.resume, args.recipe, resume=args.cont)
         start_epoch = 0
-        if checkpoint_epoch and checkpoint_recipe and args.cont:
+        if checkpoint_epoch and args.cont:
             start_epoch = checkpoint_epoch
         if args.override_checkpoint_epoch:
             start_epoch = 0
@@ -246,7 +246,7 @@ def train():
         sparseml_wrapper = SparseMLWrapper(yolact_net, args.recipe)
         sparseml_wrapper.initialize(start_epoch=start_epoch)
 
-    optimizer = optim.SGD(yolact_net.parameters(), lr=args.lr, momentum=args.momentum,
+    optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=args.momentum,
                           weight_decay=args.decay)
     criterion = MultiBoxLoss(num_classes=cfg.num_classes,
                              pos_threshold=cfg.positive_iou_threshold,
@@ -293,7 +293,7 @@ def train():
     print()
     # try-except so you can use ctrl+c to save early and stop training
     # SparseML Integration
-    half_precision = args.fp16 and args.device != 'cpu'
+    half_precision = not args.disable_fp16 and args.device != 'cpu'
     scaler = amp.GradScaler(enabled=half_precision)
     sparseml_wrapper.initialize_loggers(logger, tb_writer=TensorBoardLogger,
                                         wandb_logger=args.wandb, rank=-1)
