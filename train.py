@@ -98,6 +98,7 @@ parser.add_argument('--fp16',
                     help ='flag to switch on fp16 while training'
                     )
 parser.add_argument('--wandb', action='store_true', help="Flag to use wandb logging")
+parser.add_argument('--cont', action='store_true', help="Flag to continue application of a halted recipe.")
 
 parser.set_defaults(keep_latest=False, log=True, log_gpu=False, interrupt=True, autoscale=True)
 args = parser.parse_args()
@@ -229,10 +230,12 @@ def train():
 
     if args.resume and args.resume.lower() not in ("no", "false", "f", "0"):
         print('Resuming training, loading checkpoint {}...'.format(args.resume))
-        checkpoint_epoch, checkpoint_recipe, sparseml_wrapper = yolact_net.load_checkpoint(args.resume, args.recipe)
+        checkpoint_epoch, checkpoint_recipe, sparseml_wrapper = yolact_net.load_checkpoint(args.resume, args.recipe, resume=args.cont)
         start_epoch = 0
-        if checkpoint_epoch and checkpoint_recipe: start_epoch = checkpoint_epoch
-        if args.override_checkpoint_epoch: start_epoch = 0
+        if checkpoint_epoch and checkpoint_recipe and args.cont:
+            start_epoch = checkpoint_epoch
+        if args.override_checkpoint_epoch:
+            start_epoch = 0
         args.recipe = args.recipe or checkpoint_recipe
         if args.start_iter == -1:
             args.start_iter = SavePath.from_str(args.resume).iteration
@@ -270,20 +273,16 @@ def train():
     conf_loss = 0
     iteration = max(args.start_iter, 0)
     last_time = time.time()
-
     epoch_size = len(dataset) // args.batch_size
     num_epochs = math.ceil(cfg.max_iter / epoch_size)
 
-
     # Which learning rate adjustment step are we on? lr' = lr * gamma ^ step_index
     step_index = 0
-
     data_loader = data.DataLoader(dataset, args.batch_size,
                                   num_workers=args.num_workers,
                                   shuffle=True, collate_fn=detection_collate,
                                   pin_memory=True)
-    
-    
+
     save_path = lambda epoch, iteration: SavePath(cfg.name, epoch, iteration).get_path(root=args.save_folder)
     time_avg = MovingAverage()
 
@@ -348,9 +347,9 @@ def train():
                 # Warm up by linearly interpolating the learning rate from some smaller value
 
                 needs_manual_lr_update = (
-                                                 cfg.lr_warmup_until > 0 and
-                                          iteration <=cfg.lr_warmup_until and
-                                not sparseml_wrapper.should_override_scheduler()
+                    cfg.lr_warmup_until > 0 and
+                    iteration <= cfg.lr_warmup_until and
+                    not sparseml_wrapper.should_override_scheduler()
                 )
                 if needs_manual_lr_update:
                     set_lr(optimizer, (args.lr - cfg.lr_warmup_init) * (iteration / cfg.lr_warmup_until) + cfg.lr_warmup_init)
@@ -372,6 +371,8 @@ def train():
                     losses = { k: (v).mean() for k,v in losses.items() } # Mean here because Dataparallel
                     loss = sum([losses[k] for k in losses])
 
+                # log losses on wandb
+                sparseml_wrapper.log_losses_wandb(losses=losses)
                 # no_inf_mean removes some components from the loss, so make sure to backward through all of it
                 # all_loss = sum([v.mean() for v in losses.values()])
 

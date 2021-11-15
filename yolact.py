@@ -24,9 +24,9 @@ from utils.sparse import SparseMLWrapper
 torch.cuda.current_device()
 
 # As of March 10, 2019, Pytorch DataParallel still doesn't support JIT Script Modules
+# jit turned off for SparseMl Integration to support Quantization
 use_jit = False
-if not use_jit:
-    print('JIT turned off')
+
 
 ScriptModuleWrapper = torch.jit.ScriptModule if use_jit else nn.Module
 script_method_wrapper = torch.jit.script_method if use_jit else lambda fn, _rcn=None: fn
@@ -481,7 +481,7 @@ class Yolact(nn.Module):
                      }
         torch.save(checkpoint, path)
 
-    def load_checkpoint(self, path, recipe=None) -> Tuple[Optional[int], Optional[str], SparseMLWrapper]:
+    def load_checkpoint(self, path, recipe=None, resume: bool = False) -> Tuple[Optional[int], Optional[str], SparseMLWrapper]:
         """ Loads weights into the current Yolact object.
 
         :return: A tuple containing the epoch and the recipe if
@@ -513,7 +513,7 @@ class Yolact(nn.Module):
                 self.load_state_dict(state_dict)
 
                 loaded = True
-            sparseml_wrapper.initialize(start_epoch=epoch)
+            sparseml_wrapper.initialize(start_epoch=epoch or 0 if resume else 0)
         if not loaded: self.load_state_dict(state_dict=state_dict)
         return epoch or 0, recipe, sparseml_wrapper
 

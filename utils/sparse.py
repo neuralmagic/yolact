@@ -69,6 +69,12 @@ class SparseMLWrapper(object):
                 file.write(str(self.manager))
             wandb.log_artifact(artifact)
 
+    def log_losses_wandb(self, losses=None):
+        if wandb_available:
+            wandb.log(
+                {'losses': losses}
+            )
+
     def modify(self, scaler, optimizer, model, dataloader):
         if self.enabled:
             return self.manager.modify(
