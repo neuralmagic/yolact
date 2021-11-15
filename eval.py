@@ -32,6 +32,7 @@ from PIL import Image
 import matplotlib.pyplot as plt
 import cv2
 deepsparse_available = False
+device=None
 with contextlib.suppress(Exception):
     import deepsparse
     deepsparse_available = True
