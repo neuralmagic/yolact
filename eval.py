@@ -1,4 +1,5 @@
 import contextlib
+import itertools
 
 from data import COCODetection, get_label_map, MEANS, COLORS
 from utils.wrapper import DeepsparseWrapper
@@ -150,7 +151,7 @@ def prep_display(dets_out, img, h, w, undo_transform=True, class_color=False, ma
     """
     if undo_transform:
         img_numpy = undo_image_transformation(img, w, h)
-        img_gpu = torch.Tensor(img_numpy).cuda()
+        img_gpu = torch.Tensor(img_numpy).to(device)
     else:
         img_gpu = img / 255.0
         h, w, _ = img.shape
@@ -426,8 +427,10 @@ def prep_metrics(ap_data, dets, img, gt, gt_masks, h, w, num_crowd, image_id, de
             scores = list(scores.cpu().numpy().astype(float))
             box_scores = scores
             mask_scores = scores
-        masks = masks.view(-1, h*w).cuda()
-        boxes = boxes.cuda()
+        masks = masks.view(-1, h*w)
+        if args.cuda:
+            masks = masks.cuda()
+            boxes = boxes.cuda()
 
 
     if args.output_coco_json:
@@ -607,7 +610,7 @@ def badhash(x):
 
 def evalimage(net:Yolact, path:str, save_path:str=None):
     frame = torch.from_numpy(cv2.imread(path)).to(device).float()
-    batch = FastBaseTransform()(frame.unsqueeze(0))
+    batch = FastBaseTransform(cuda=False)(frame.unsqueeze(0))
     preds = net(batch)
 
     img_numpy = prep_display(preds, frame, None, None, undo_transform=False)
@@ -671,10 +674,10 @@ def evalvideo(net:Yolact, path:str, out_path:str=None):
     else:
         num_frames = round(vid.get(cv2.CAP_PROP_FRAME_COUNT))
 
-    transform = FastBaseTransform()
+    transform = FastBaseTransform(cuda=False)
     if args.cuda:
         net = CustomDataParallel(net).cuda()
-        transform = torch.nn.DataParallel(transform).cuda()
+        transform = torch.nn.DataParallel(FastBaseTransform()).cuda()
     frame_times = MovingAverage(100)
     fps = 0
     frame_time_target = 1 / target_fps
@@ -706,7 +709,10 @@ def evalvideo(net:Yolact, path:str, out_path:str=None):
 
     def transform_frame(frames):
         with torch.no_grad():
-            frames = [torch.from_numpy(frame).cuda().float() for frame in frames]
+            frames = []
+            for frame in frames:
+                f = torch.from_numpy(frame)
+                frames.append(f.cuda().float() if args.cuda else f.float())
             return frames, transform(torch.stack(frames, 0))
 
     def eval_network(inp):
@@ -941,13 +947,16 @@ def evaluate(net:Yolact, dataset, train_mode=False):
         dataset_indices.sort(key=lambda x: hashed[x])
 
     dataset_indices = dataset_indices[:dataset_size]
-
+    printed_fps_calc_message = False
     try:
         # Main eval loop
-        for it, image_idx in enumerate(dataset_indices):
+        for it, image_idx in enumerate(itertools.cycle(dataset_indices)):
             timer.reset()
-            if args.num_iterations and it > args.warm_up_iterations + args.num_iterations:
+            if not args.num_iterations and it == dataset_size:
                 break
+            elif args.num_iterations and it > args.warm_up_iterations + args.num_iterations:
+                break
+
             with timer.env('Load Data'):
                 batch, gt, gt_masks, h, img, num_crowd, w = load_batch(dataset,
                                                                        image_idx)
@@ -965,20 +974,24 @@ def evaluate(net:Yolact, dataset, train_mode=False):
             # First few images take longer because we're constructing the graph.
             # Don't include warm_up_iterations in the FPS calculations.
             if it > args.warm_up_iterations:
+                if not printed_fps_calc_message:
+                    printed_fps_calc_message = True
+                    print('Warm up iterations over, starting FPS calc')
                 frame_times.add(timer.total_time())
             
             if args.display:
-                if it > 1:
+                if it > args.warm_up_iterations:
                     print('Avg FPS: %.4f' % (1 / frame_times.get_avg()))
                 plt.imshow(img_numpy)
                 plt.title(str(dataset.ids[image_idx]))
                 plt.show()
             elif not args.no_bar:
-                if it > 1: fps = 1 / frame_times.get_avg()
+                if it > args.warm_up_iterations: fps = 1 / frame_times.get_avg()
                 else: fps = 0
                 progress = (it+1) / dataset_size * 100
                 progress_bar.set_val(it+1)
-                print('\rProcessing Images  %s %6d / %6d (%5.2f%%)    %5.2f fps        '
+                if it > args.warm_up_iterations:
+                    print('\rProcessing Images  %s %6d / %6d (%5.2f%%)    %5.2f fps        '
                     % (repr(progress_bar), it+1, dataset_size, progress, fps), end='')
 
 
