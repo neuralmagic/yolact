@@ -32,7 +32,7 @@ from PIL import Image
 import matplotlib.pyplot as plt
 import cv2
 deepsparse_available = False
-device=None
+device='cpu'
 with contextlib.suppress(Exception):
     import deepsparse
     deepsparse_available = True
@@ -122,7 +122,7 @@ def parse_args(argv=None):
     parser.add_argument('--emulate_playback', default=False, dest='emulate_playback', action='store_true',
                         help='When saving a video, emulate the framerate that you\'d get running in real-time mode.')
     parser.add_argument('--num_cores', default=None, help="The num of cores to use (supported only with deepsparse), defaults to None")
-    parser.add_argument('--warm_up_iterations', default=0, type=int, help="The num of warm up iterations to run the engine for, defaults to None")
+    parser.add_argument('--warm_up_iterations', default=1, type=int, help="The num of warm up iterations to run the engine for, defaults to 1")
     parser.add_argument('--num_iterations', default=0, type=int, help="The num of iterations to run the engine for, defaults to the validation set")
     parser.add_argument('--batch_size', default=1, type=int, help="The batch size to use the engine for, defaults to 1")
 
@@ -388,7 +388,7 @@ class Detections:
 
 def _mask_iou(mask1, mask2, iscrowd=False):
     with timer.env('Mask IoU'):
-        ret = mask_iou(mask1, mask2, iscrowd)
+        ret = mask_iou(mask1, mask2, iscrowd, device=device)
     return ret.cpu()
 
 def _bbox_iou(bbox1, bbox2, iscrowd=False):
@@ -946,19 +946,11 @@ def evaluate(net:Yolact, dataset, train_mode=False):
         # Main eval loop
         for it, image_idx in enumerate(dataset_indices):
             timer.reset()
-
+            if args.num_iterations and it > args.warm_up_iterations + args.num_iterations:
+                break
             with timer.env('Load Data'):
-                img, gt, gt_masks, h, w, num_crowd = dataset.pull_item(image_idx)
-
-                # Test flag, do not upvote
-                if cfg.mask_proto_debug:
-                    with open('scripts/info.txt', 'w') as f:
-                        f.write(str(dataset.ids[image_idx]))
-                    np.save('scripts/gt.npy', gt_masks)
-
-                batch = Variable(img.unsqueeze(0))
-                if args.cuda:
-                    batch = batch.cuda()
+                batch, gt, gt_masks, h, img, num_crowd, w = load_batch(dataset,
+                                                                       image_idx)
 
             with timer.env('Network Extra'):
                 preds = net(batch)
@@ -970,9 +962,9 @@ def evaluate(net:Yolact, dataset, train_mode=False):
             else:
                 prep_metrics(ap_data, preds, img, gt, gt_masks, h, w, num_crowd, dataset.ids[image_idx], detections)
             
-            # First couple of images take longer because we're constructing the graph.
-            # Since that's technically initialization, don't include those in the FPS calculations.
-            if it > 1:
+            # First few images take longer because we're constructing the graph.
+            # Don't include warm_up_iterations in the FPS calculations.
+            if it > args.warm_up_iterations:
                 frame_times.add(timer.total_time())
             
             if args.display:
@@ -1016,6 +1008,19 @@ def evaluate(net:Yolact, dataset, train_mode=False):
 
     except KeyboardInterrupt:
         print('Stopping...')
+
+
+def load_batch(dataset, image_idx):
+    img, gt, gt_masks, h, w, num_crowd = dataset.pull_item(image_idx)
+    # Test flag, do not upvote
+    if cfg.mask_proto_debug:
+        with open('scripts/info.txt', 'w') as f:
+            f.write(str(dataset.ids[image_idx]))
+        np.save('scripts/gt.npy', gt_masks)
+    batch = Variable(img.unsqueeze(0))
+    if args.cuda:
+        batch = batch.cuda()
+    return batch, gt, gt_masks, h, img, num_crowd, w
 
 
 def calc_map(ap_data):
@@ -1115,7 +1120,6 @@ if __name__ == '__main__':
         if deepsparse_available and run_deepsparse:
             net = DeepsparseWrapper(filepath=args.trained_model, cfg=cfg,
                                     num_cores=args.num_cores,
-                                    warm_up_iterations=args.warm_up_iterations,
                                     batch_size=args.batch_size
                                     )
 

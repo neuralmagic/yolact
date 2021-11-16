@@ -11,7 +11,7 @@ from yolact import FastMaskIoUNet
 
 
 class DeepsparseWrapper:
-    def __init__(self, filepath, cfg, num_cores=None, warm_up_iterations=0,
+    def __init__(self, filepath, cfg, num_cores=None,
                  batch_size=1):
         self.engine = compile_model(filepath, batch_size=batch_size,
                                     num_cores=num_cores)
@@ -19,11 +19,6 @@ class DeepsparseWrapper:
                              conf_thresh=cfg.nms_conf_thresh,
                              nms_thresh=cfg.nms_thresh)
         self.maskiou_net = FastMaskIoUNet()
-        if warm_up_iterations:
-            print(f"Running {warm_up_iterations} warm up iterations")
-        for _ in range(warm_up_iterations):
-            inputs = generate_random_inputs(filepath, batch_size)
-            self(inputs)
 
     def __call__(self, inputs):
         if torch.is_tensor(inputs):
