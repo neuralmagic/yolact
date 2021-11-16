@@ -91,7 +91,6 @@ class ExportArgs:
     no_qat: bool
     batch_size: int
     image_shape: Iterable
-    save_dir: Path
     name: Path
 
     def __post_init__(self):
@@ -106,7 +105,13 @@ class ExportArgs:
             )
 
         self.image_shape = tuple(self.image_shape)
-        self.save_dir = Path(self.save_dir)
+        name_path = Path(self.name) if self.name else Path(".")
+        if name_path.suffix == '':
+            self.save_dir = name_path
+            self.name = ''
+        else:
+            self.save_dir = name_path.parent
+            self.name = name_path.name
         self.save_dir.mkdir(parents=True, exist_ok=True)
         self.name = self.get_safe_name()
 
@@ -144,7 +149,7 @@ def parse_args() -> ExportArgs:
         "--config",
         "-c",
         type=str,
-        default="yolact_base_config",
+        default="yolact_darkenet53_config",
         help="The config used to train the yolact model, for ex: "
         "yolact_darknet53_config, yolact_resnet50_config, etc...; "
         "Defaults to yolact_base_config.",
@@ -156,7 +161,8 @@ def parse_args() -> ExportArgs:
         type=str,
         default=None,
         help="Path or SparseZoo stub to the recipe used for training, "
-        "omit if no recipe used.",
+        "omit if no recipe used. If no recipe given, "
+        "but the checkpoint recipe is applied if present.",
     )
 
     parser.add_argument(
@@ -187,20 +193,12 @@ def parse_args() -> ExportArgs:
     )
 
     parser.add_argument(
-        "--save-dir",
-        "-s",
-        type=str,
-        default="./exported_models",
-        help="The directory to save exported models to; "
-        'Defaults to "./exported_models"',
-    )
-
-    parser.add_argument(
         "--name",
         "-n",
         type=str,
         default=None,
-        help="The name to use for saving the exported ONNX model",
+        help="The path to use for saving the exported ONNX model."
+             "If directory, defaults to checkpoint-name.onnx",
     )
 
     args = parser.parse_args()
