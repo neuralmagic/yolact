@@ -121,6 +121,9 @@ def parse_args(argv=None):
                         help='When displaying / saving video, draw the FPS on the frame')
     parser.add_argument('--emulate_playback', default=False, dest='emulate_playback', action='store_true',
                         help='When saving a video, emulate the framerate that you\'d get running in real-time mode.')
+    parser.add_argument('--num_cores', default=None, help="The num of cores to use (supported only with deepsparse), defaults to None")
+    parser.add_argument('--warm_up_iterations', default=0, type=int, help="The num of warm up iterations to run the engine for, defaults to None")
+    parser.add_argument('--batch_size', default=1, type=int, help="The batch size to use the engine for, defaults to 1")
 
     parser.set_defaults(no_bar=False, display=False, resume=False, output_coco_json=False, output_web_json=False, shuffle=False,
                         benchmark=False, no_sort=False, no_hash=False, mask_proto_debug=False, crop=True, detect=False, display_fps=False,
@@ -1108,7 +1111,11 @@ if __name__ == '__main__':
         print('Loading model...', end='')
 
         if deepsparse_available and run_deepsparse:
-            net = DeepsparseWrapper(filepath=args.trained_model, cfg=cfg)
+            net = DeepsparseWrapper(filepath=args.trained_model, cfg=cfg,
+                                    num_cores=args.num_cores,
+                                    warm_up_iterations=args.warm_up_iterations,
+                                    batch_size=args.batch_size
+                                    )
             global device
             device = 'cpu'
         else:
