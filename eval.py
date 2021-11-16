@@ -1063,7 +1063,8 @@ def print_maps(all_maps):
 if __name__ == '__main__':
     parse_args()
     run_deepsparse = args.trained_model.endswith('.onnx') or args.startswith('zoo')
-    if deepsparse_available and run_deepsparse: args.cuda = False
+    if deepsparse_available and run_deepsparse:
+        args.cuda = False
     if args.config is not None:
         set_cfg(args.config)
 
@@ -1119,6 +1120,9 @@ if __name__ == '__main__':
             global device
             device = 'cpu'
         else:
+            if args.cuda:
+                global device
+                device = 'cuda'
             net = Yolact()
             net.load_checkpoint(args.trained_model)
             net.eval()
