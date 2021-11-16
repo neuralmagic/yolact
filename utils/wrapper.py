@@ -21,7 +21,7 @@ class DeepsparseWrapper:
         self.maskiou_net = FastMaskIoUNet()
         if warm_up_iterations:
             print(f"Running {warm_up_iterations} warm up iterations")
-        for _ in warm_up_iterations:
+        for _ in range(warm_up_iterations):
             inputs = generate_random_inputs(filepath, batch_size)
             self(inputs)
 

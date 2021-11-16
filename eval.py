@@ -123,6 +123,7 @@ def parse_args(argv=None):
                         help='When saving a video, emulate the framerate that you\'d get running in real-time mode.')
     parser.add_argument('--num_cores', default=None, help="The num of cores to use (supported only with deepsparse), defaults to None")
     parser.add_argument('--warm_up_iterations', default=0, type=int, help="The num of warm up iterations to run the engine for, defaults to None")
+    parser.add_argument('--num_iterations', default=0, type=int, help="The num of iterations to run the engine for, defaults to the validation set")
     parser.add_argument('--batch_size', default=1, type=int, help="The batch size to use the engine for, defaults to 1")
 
     parser.set_defaults(no_bar=False, display=False, resume=False, output_coco_json=False, output_web_json=False, shuffle=False,
@@ -605,7 +606,7 @@ def badhash(x):
     return x
 
 def evalimage(net:Yolact, path:str, save_path:str=None):
-    frame = torch.from_numpy(cv2.imread(path)).cuda().float()
+    frame = torch.from_numpy(cv2.imread(path)).to(device).float()
     batch = FastBaseTransform()(frame.unsqueeze(0))
     preds = net(batch)
 
@@ -1062,7 +1063,7 @@ def print_maps(all_maps):
 
 if __name__ == '__main__':
     parse_args()
-    run_deepsparse = args.trained_model.endswith('.onnx') or args.startswith('zoo')
+    run_deepsparse = args.trained_model.endswith('.onnx') or args.trained_model.startswith('zoo')
     if deepsparse_available and run_deepsparse:
         args.cuda = False
     if args.config is not None:
@@ -1117,11 +1118,11 @@ if __name__ == '__main__':
                                     warm_up_iterations=args.warm_up_iterations,
                                     batch_size=args.batch_size
                                     )
-            global device
+
             device = 'cpu'
         else:
             if args.cuda:
-                global device
+
                 device = 'cuda'
             net = Yolact()
             net.load_checkpoint(args.trained_model)
