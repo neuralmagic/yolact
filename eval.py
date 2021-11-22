@@ -131,6 +131,9 @@ Example usage:
 ##########
 # Commands to Evaluate on COCO Validation
 # Needs Data to be set up using `sh data/scripts/COCO.sh`
+# Needs DeepSparse installed for running with deepsparse `pip install deepsparse`
+# Needs ORT installed for running with onnxruntime `pip install onnxruntime`
+
 
 1) # Using DeepSparse Engine with local weights
 # python eval.py --trained_model PRETRAINED_ONNX_WEIGHTS

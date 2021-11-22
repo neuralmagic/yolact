@@ -210,7 +210,7 @@ parser.add_argument('--fp16',
                     action='store_true',
                     help ='flag to switch off fp16 while training'
                     )
-parser.add_argument('--wandb', action='store_true', help="Flag to use wandb logging")
+parser.add_argument('--wandb', action='store_true', help="Flag to use wandb logging, needs `pip install wandb`")
 parser.add_argument('--cont', action='store_true', help="Flag to continue application of a halted recipe.")
 
 parser.set_defaults(keep_latest=False, log=True, log_gpu=False, interrupt=True, autoscale=True)
