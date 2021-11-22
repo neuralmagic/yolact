@@ -7,16 +7,17 @@ usage: eval.py [-h] [--trained_model TRAINED_MODEL] [--top_k TOP_K]
                [--cuda CUDA] [--fast_nms FAST_NMS]
                [--cross_class_nms CROSS_CLASS_NMS]
                [--display_masks DISPLAY_MASKS]
-               [--display_bboxes DISPLAY_BBOXES] [--display_text DISPLAY_TEXT]
+               [--display_bboxes DISPLAY_BBOXES]
+               [--display_text DISPLAY_TEXT]
                [--display_scores DISPLAY_SCORES] [--display] [--shuffle]
                [--ap_data_file AP_DATA_FILE] [--resume]
                [--max_images MAX_IMAGES] [--output_coco_json]
-               [--bbox_det_file BBOX_DET_FILE] [--mask_det_file MASK_DET_FILE]
-               [--config CONFIG] [--output_web_json]
-               [--web_det_path WEB_DET_PATH] [--no_bar]
-               [--display_lincomb DISPLAY_LINCOMB] [--benchmark] [--no_sort]
-               [--seed SEED] [--mask_proto_debug] [--no_crop] [--image IMAGE]
-               [--images IMAGES] [--video VIDEO]
+               [--bbox_det_file BBOX_DET_FILE]
+               [--mask_det_file MASK_DET_FILE] [--config CONFIG]
+               [--output_web_json] [--web_det_path WEB_DET_PATH] [--no_bar]
+               [--display_lincomb DISPLAY_LINCOMB] [--benchmark]
+               [--no_sort] [--seed SEED] [--mask_proto_debug] [--no_crop]
+               [--image IMAGE] [--images IMAGES] [--video VIDEO]
                [--video_multiframe VIDEO_MULTIFRAME]
                [--score_threshold SCORE_THRESHOLD] [--dataset DATASET]
                [--detect] [--display_fps] [--emulate_playback]
@@ -30,8 +31,10 @@ YOLACT COCO Evaluation
 optional arguments:
   -h, --help            show this help message and exit
   --trained_model TRAINED_MODEL
-                        Trained state_dict file path to open. If "interrupt",
-                        this will open the interrupt file.
+                        Trained state_dict file path to open. If
+                        "interrupt", this will open the interrupt
+                        file.Defaults to YOLACT base model stub from
+                        SparseZoo
   --top_k TOP_K         Further restrict the number of predictions to parse
   --cuda CUDA           Use cuda to evaulate model
   --fast_nms FAST_NMS   Whether to use a faster, but not entirely correct
@@ -49,59 +52,60 @@ optional arguments:
                         classes
   --display             Display qualitative results instead of quantitative
                         ones.
-  --shuffle             Shuffles the images when displaying them. Doesn't have
-                        much of an effect when display is off though.
+  --shuffle             Shuffles the images when displaying them. Doesn't
+                        have much of an effect when display is off though.
   --ap_data_file AP_DATA_FILE
                         In quantitative mode, the file to save detections
                         before calculating mAP.
-  --resume              If display not set, this resumes mAP calculations from
-                        the ap_data_file.
+  --resume              If display not set, this resumes mAP calculations
+                        from the ap_data_file.
   --max_images MAX_IMAGES
                         The maximum number of images from the dataset to
                         consider. Use -1 for all.
   --output_coco_json    If display is not set, instead of processing IoU
-                        values, this just dumps detections into the coco json
-                        file.
+                        values, this just dumps detections into the coco
+                        json file.
   --bbox_det_file BBOX_DET_FILE
                         The output file for coco bbox results if
                         --coco_results is set.
   --mask_det_file MASK_DET_FILE
                         The output file for coco mask results if
                         --coco_results is set.
-  --config CONFIG       The config object to use.
+  --config CONFIG       The config object to use. Defaults to
+                        yolact_darknet53_config (for DarkNet53 backbones).
   --output_web_json     If display is not set, instead of processing IoU
                         values, this dumps detections for usage with the
                         detections viewer web thingy.
   --web_det_path WEB_DET_PATH
                         If output_web_json is set, this is the path to dump
                         detections into.
-  --no_bar              Do not output the status bar. This is useful for when
-                        piping to a file.
+  --no_bar              Do not output the status bar. This is useful for
+                        when piping to a file.
   --display_lincomb DISPLAY_LINCOMB
                         If the config uses lincomb masks, output a
                         visualization of how those masks are created.
   --benchmark           Equivalent to running display mode but without
                         displaying an image.
   --no_sort             Do not sort images by hashed image ID.
-  --seed SEED           The seed to pass into random.seed. Note: this is only
-                        really for the shuffle and does not (I think) affect
-                        cuda stuff.
+  --seed SEED           The seed to pass into random.seed. Note: this is
+                        only really for the shuffle and does not (I think)
+                        affect cuda stuff.
   --mask_proto_debug    Outputs stuff for scripts/compute_mask.py.
-  --no_crop             Do not crop output masks with the predicted bounding
-                        box.
+  --no_crop             Do not crop output masks with the predicted
+                        bounding box.
   --image IMAGE         A path to an image to use for display.
   --images IMAGES       An input folder of images and output folder to save
                         detected images. Should be in the format
                         input->output.
-  --video VIDEO         A path to a video to evaluate on. Passing in a number
-                        will use that index webcam.
+  --video VIDEO         A path to a video to evaluate on. Passing in a
+                        number will use that index webcam.
   --video_multiframe VIDEO_MULTIFRAME
-                        The number of frames to evaluate in parallel to make
-                        videos play at higher fps.
+                        The number of frames to evaluate in parallel to
+                        make videos play at higher fps.
   --score_threshold SCORE_THRESHOLD
-                        Detections with a score under this threshold will not
-                        be considered. This currently only works in display
-                        mode.
+                        Detections with a score under this threshold will
+                        not be considered. This currently only works in
+                        display mode.
   --dataset DATASET     If specified, override the dataset specified in the
                         config with this one (example: coco2017_dataset).
   --detect              Don't evauluate the mask branch at all and only do
@@ -109,17 +113,17 @@ optional arguments:
                         --benchmark.
   --display_fps         When displaying / saving video, draw the FPS on the
                         frame
-  --emulate_playback    When saving a video, emulate the framerate that you'd
-                        get running in real-time mode.
+  --emulate_playback    When saving a video, emulate the framerate that
+                        you'd get running in real-time mode.
   --num_cores NUM_CORES
                         The num of cores to use (supported only with
                         deepsparse), defaults to None
   --warm_up_iterations WARM_UP_ITERATIONS
-                        The num of warm up iterations to run the engine for,
-                        defaults to 1
+                        The num of warm up iterations to run the engine
+                        for, defaults to 1
   --num_iterations NUM_ITERATIONS
-                        The num of iterations to run the engine for, defaults
-                        to the validation set
+                        The num of iterations to run the engine for,
+                        defaults to the validation set
   --batch_size BATCH_SIZE
                         The batch size to use the engine for, defaults to 1
   --engine {deepsparse,ort,torch}
@@ -279,7 +283,10 @@ def parse_args(argv=None):
     parser = argparse.ArgumentParser(
         description='YOLACT COCO Evaluation')
     parser.add_argument('--trained_model',default=base_model_stub, type=str,
-                        help='Trained state_dict file path to open. If "interrupt", this will open the interrupt file.')
+                        help='Trained state_dict file path to open. '
+                        'If "interrupt", this will open the interrupt file.'
+                        'Defaults to YOLACT base model stub from SparseZoo'
+                        )
     parser.add_argument('--top_k', default=5, type=int,
                         help='Further restrict the number of predictions to parse')
     parser.add_argument('--cuda', default=True, type=str2bool,
@@ -313,7 +320,7 @@ def parse_args(argv=None):
     parser.add_argument('--mask_det_file', default='results/mask_detections.json', type=str,
                         help='The output file for coco mask results if --coco_results is set.')
     parser.add_argument('--config', default='yolact_darknet53_config',
-                        help='The config object to use.')
+                        help='The config object to use. Defaults to yolact_darknet53_config (for DarkNet53 backbones). ')
     parser.add_argument('--output_web_json', dest='output_web_json', action='store_true',
                         help='If display is not set, instead of processing IoU values, this dumps detections for usage with the detections viewer web thingy.')
     parser.add_argument('--web_det_path', default='web/dets/', type=str,
