@@ -232,9 +232,11 @@ Some Useful Model Stubs:
     zoo:cv/segmentation/yolact-darknet53/pytorch/dbolya/coco/pruned82_quant-none
 
 """
+
 import itertools
 
 from sparsezoo.utils import load_numpy_list
+
 from data import COCODetection, get_label_map, MEANS, COLORS
 from utils.engines import Engine
 from utils.wrapper import DeepSparseWrapper, ORTWrapper
@@ -1288,8 +1290,6 @@ def evaluate(net:Yolact, dataset, train_mode=False):
                 if iteration > args.warm_up_iterations:
                     print('\rProcessing Images  %s %6d / %6d (%5.2f%%)    %5.2f fps        '
                           % (repr(progress_bar), curr_progress, dataset_size, progress, fps * args.batch_size), end='')
-
-
 
         if not args.display and not args.benchmark:
             print()
