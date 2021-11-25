@@ -1226,7 +1226,7 @@ def evaluate(net:Yolact, dataset, train_mode=False):
             timer.reset()
             if not args.num_iterations and iteration == args.warm_up_iterations + dataset_size:
                 break
-            elif args.num_iterations and iteration > args.warm_up_iterations + args.num_iterations:
+            elif args.num_iterations and iteration >= args.warm_up_iterations + args.num_iterations:
                 break
 
             with timer.env('Load Data'):
