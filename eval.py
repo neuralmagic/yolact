@@ -1326,7 +1326,7 @@ def evaluate(net:Yolact, dataset, train_mode=False):
             print()
             print()
             avg_seconds = frame_times.get_avg()
-            print('Average: %5.2f fps, %5.2f ms per batch' % (args.batch_size / frame_times.get_avg(), 1000*avg_seconds)
+            print('Average: %5.2f fps, %5.2f ms per batch' % (args.batch_size / frame_times.get_avg(), 1000*avg_seconds))
 
     except KeyboardInterrupt:
         print('Stopping...')
