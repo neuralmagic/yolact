@@ -511,12 +511,12 @@ class Yolact(nn.Module):
         else:
             quantized_state_dict = any([name.endswith('.zero_point') for name in state_dict.keys()])
             if not quantized_state_dict:
-                self.load_state_dict(state_dict)
+                self.load_state_dict(state_dict, strict=False)
 
                 loaded = True
             sparseml_wrapper.initialize(start_epoch=epoch or 0 if resume else 0)
         if not loaded:
-            self.load_state_dict(state_dict=state_dict)
+            self.load_state_dict(state_dict=state_dict, strict=False)
         return epoch or 0, recipe, sparseml_wrapper
 
     def init_weights(self, backbone_path):

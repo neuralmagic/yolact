@@ -767,6 +767,28 @@ yolact_resnet50_pascal_config = yolact_resnet50_config.copy({
     })
 })
 
+
+yolact_base_pascal_config = yolact_resnet50_pascal_config.copy({
+    'name': "yolact_resnet101_pascal",
+
+    # Dataset stuff
+    'dataset': pascal_sbd_dataset,
+    'num_classes': len(pascal_sbd_dataset.class_names) + 1,
+
+    'max_iter': 120000,
+    'lr_steps': (60000, 100000),
+
+    # Backbone Settings
+    'backbone': resnet101_backbone.copy({
+        'selected_layers': list(range(1, 4)),
+        'use_pixel_scales': True,
+        'preapply_sqrt': False,
+        'use_square_anchors': True,  # This is for backward compatability with a bug
+
+        'pred_scales': [[32], [64], [128], [256], [512]],
+    }),
+})
+
 # ----------------------- YOLACT++ CONFIGS ----------------------- #
 
 yolact_plus_base_config = yolact_base_config.copy({
