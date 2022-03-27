@@ -1,3 +1,5 @@
+import logging
+
 import torch, torchvision
 import torch.nn as nn
 import torch.nn.functional as F
@@ -518,6 +520,16 @@ class Yolact(nn.Module):
         if not loaded:
             self.load_state_dict(state_dict=state_dict, strict=False)
         return epoch or 0, recipe, sparseml_wrapper
+
+    def load_state_dict(self, state_dict: 'OrderedDict[str, Tensor]', strict: bool = True):
+        current = self.state_dict()
+
+        for key in list(current.keys()):
+            if current[key].shape() != state_dict[key].shape():
+                state_dict[key] = current[key]
+                logging.warning(f"overwrote the tensor in stea_dict with key {key} because of size mismatch")
+
+        return super().load_state_dict(state_dict, strict)
 
     def init_weights(self, backbone_path):
         """ Initialize weights for training. """
