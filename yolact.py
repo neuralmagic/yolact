@@ -525,7 +525,7 @@ class Yolact(nn.Module):
         current = self.state_dict()
 
         for key in list(current.keys()):
-            if key in state_dict and isinstance(current[key], torch.Tensor) and current[key].shape() != state_dict[key].shape():
+            if key in state_dict and isinstance(current[key], torch.Tensor) and current[key].shape != state_dict[key].shape:
                 state_dict[key] = current[key]
                 logging.warning(f"overwrote the tensor in stea_dict with key {key} because of size mismatch")
 
