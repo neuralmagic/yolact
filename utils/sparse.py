@@ -1,5 +1,5 @@
 import contextlib
-import math
+import logging
 
 import torch.nn as nn
 from sparseml.pytorch.optim import ScheduledModifierManager
@@ -11,6 +11,7 @@ with contextlib.suppress(ModuleNotFoundError):
 
     wandb_available = True
 
+_LOGGER = logging.getLogger(__file__)
 
 def is_parallel(model):
     return type(model) in (
@@ -18,7 +19,7 @@ def is_parallel(model):
 
 
 class SparseMLWrapper(object):
-    def __init__(self, model, recipe):
+    def __init__(self, model, recipe, checkpoint_recipe=None, checkpoint_epoch=float('inf')):
         self.enabled = bool(recipe)
         self.model = model.module if is_parallel(model) else model
         self.recipe = recipe
@@ -26,10 +27,20 @@ class SparseMLWrapper(object):
             recipe
         ) if self.enabled else None
         self.logger = None
+        self.checkpoint_recipe_manager = ScheduledModifierManager.from_yaml(
+            checkpoint_recipe
+        ) if checkpoint_recipe else None
+
+        if self.checkpoint_recipe_manager:
+            _LOGGER.info("Applying structure from checkpoint recipe")
+            self.checkpoint_recipe_manager.apply_structure(
+            module=model,
+            epoch=checkpoint_epoch,
+        )
 
     def state_dict(self):
         return {
-            'recipe': str(self.manager) if self.enabled else None,
+            'recipe': str(self.compose_recipes()) if self.enabled else None,
         }
 
     def apply(self):
@@ -119,3 +130,17 @@ class SparseMLWrapper(object):
             return qat_start < epoch + 1
 
         return False
+
+    def compose_recipes(self):
+        """
+        Combine checkpoint recipe + training recipe and return the new composed manager
+
+        :return: A manager representing composed recipe
+        """
+        if not self.checkpoint_recipe_manager:
+            return self.manager
+
+        return self.manager.compose_staged(
+            base_recipe=self.recipe, additional_recipe=self.checkpoint_recipe_manager,
+        )
+

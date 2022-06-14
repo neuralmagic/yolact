@@ -367,21 +367,23 @@ def train():
 
     if args.resume and args.resume.lower() not in ("no", "false", "f", "0"):
         print('Resuming training, loading checkpoint {}...'.format(args.resume))
-        checkpoint_epoch, checkpoint_recipe, sparseml_wrapper = yolact_net.load_checkpoint(args.resume, args.recipe, resume=args.cont)
-        start_epoch = 0
-        if checkpoint_epoch and args.cont:
-            start_epoch = checkpoint_epoch
-        if not args.use_checkpoint_epoch:
-            start_epoch = 0
-        args.recipe = args.recipe or checkpoint_recipe
+        start_epoch, train_recipe, sparseml_wrapper = yolact_net.load_checkpoint(
+            path=args.resume,
+            train_recipe=args.recipe,
+            resume=args.cont,
+        )
+        args.recipe = train_recipe
         if args.start_iter == -1:
             args.start_iter = SavePath.from_str(args.resume).iteration
     else:
         print('Initializing weights...')
         yolact_net.init_weights(backbone_path=args.save_folder + cfg.backbone.path)
-        start_epoch= 0
-        sparseml_wrapper = SparseMLWrapper(yolact_net, args.recipe)
-        sparseml_wrapper.initialize(start_epoch=start_epoch)
+        sparseml_wrapper = SparseMLWrapper(
+            model=yolact_net,
+            recipe=args.recipe,
+        )
+        # A new run always starts from epoch 0
+        sparseml_wrapper.initialize(start_epoch=0)
 
     optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=args.momentum,
                           weight_decay=args.decay)
@@ -454,7 +456,7 @@ def train():
                 half_precision = False
 
             # Resume from start_iter
-            if (epoch+1)*epoch_size < iteration:
+            if (epoch+1) * epoch_size < iteration:
                 continue
             
             for datum in data_loader:
@@ -561,7 +563,8 @@ def train():
                     yolact_net.save_checkpoint(
                         save_path(epoch, iteration),
                         recipe=sparseml_wrapper.state_dict().get('recipe'),
-                        epoch=epoch)
+                        epoch=epoch,
+                    )
 
                     if args.keep_latest and latest is not None:
                         if args.keep_latest_interval <= 0 or iteration % args.keep_latest_interval != args.save_interval:
