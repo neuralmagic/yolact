@@ -8,6 +8,7 @@
 REPO_NAME="yolact"
 NEEDED_FOLDERS=("data" "external" "layers" "scripts" "utils" "web")
 REQUIREMENTS_FILE="requirements.txt"
+SETUP_FILE="setup.py"
 PYTHON_EXTENSION=".py"
 PACKAGE_TEST_DIR="/tmp/$USER/pip_package_test"
 
@@ -65,8 +66,8 @@ __validate_files() {
   fi
 
   # setup.py
-  if [[ ! -e "setup.py" ]]; then
-    echo "setup.py file not found" 1>&2
+  if [[ ! -e "${SETUP_FILE}" ]]; then
+    echo "${SETUP_FILE} file not found" 1>&2
     return 3
   fi
 }
@@ -80,7 +81,6 @@ __copy_files() {
 
   for folder in "${NEEDED_FOLDERS[@]}"; do
     cp --recursive "${folder}" "${REPO_NAME}"
-    grep --include=\*.py -rnl "${REPO_NAME}/" -e "from ${folder}" | xargs -i@ sed -i "s/from ${folder}/from ${REPO_NAME}.${folder}/g" @
   done
 
   echo "Copying ${REQUIREMENTS_FILE} ... "
@@ -92,15 +92,21 @@ __copy_files() {
 }
 
 __fix_requirements() {
+  echo "Fixing ${REQUIREMENTS_FILE} ... "
   sed -i '/^sparseml/d' "${REPO_NAME}/${REQUIREMENTS_FILE}"
+
+  for folder in "${NEEDED_FOLDERS[@]}"; do
+    echo "Fixing imports in ${folder} ... "
+    grep --include="*.py" -rnl "${REPO_NAME}/" -e "from ${folder}" | xargs -i@ sed -i "s/from ${folder}/from ${REPO_NAME}.${folder}/g" @
+  done
 }
 
 __build_setup() {
   # install build-tools
   python3 -m pip install --upgrade build
 
-  package_name="$(python3 setup.py --name)"
-  package_version="$(python3 setup.py --version)"
+  package_name="$(python3 ${SETUP_FILE} --name)"
+  package_version="$(python3 ${SETUP_FILE} --version)"
 
   if [[ -z "$package_name" || -z "$package_version" ]]; then
     echo "Could not determine package name/version (found ${package_name}==${package_version})" 1>&2
@@ -119,7 +125,7 @@ __build_setup() {
 
 __test_build() {
   # shellcheck disable=SC2174
-  mkdir -m 700 -p "${PACKAGE_TEST_DIR}" || return 11
+  mkdir --mode 700 --parents "${PACKAGE_TEST_DIR}" || return 11
   whl_file=$(find "dist/" -type f -name "*.whl")
 
   echo "Attempting to install ${whl_file}"
@@ -136,4 +142,4 @@ __teardown() {
   rm --recursive --force "${PACKAGE_TEST_DIR}" || return 12
 }
 
-main;
+main
