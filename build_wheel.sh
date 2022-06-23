@@ -95,10 +95,27 @@ __fix_requirements() {
   echo "Fixing ${REQUIREMENTS_FILE} ... "
   sed -i '/^sparseml/d' "${REPO_NAME}/${REQUIREMENTS_FILE}"
 
+  echo "Fixing folder level imports ... "
   for folder in "${NEEDED_FOLDERS[@]}"; do
-    echo "Fixing imports in ${folder} ... "
-    grep --include="*.py" -rnl "${REPO_NAME}/" -e "from ${folder}" | xargs -i@ sed -i "s/from ${folder}/from ${REPO_NAME}.${folder}/g" @
+    __fix_imports "${folder}"
   done
+
+  echo "Fixing file level imports ... "
+  find "${REPO_NAME}" -maxdepth 1 -type f -name "*${PYTHON_EXTENSION}" -print0 | while read -r -d $'\0' file; do
+    __fix_imports "${file}"
+  done
+
+}
+
+__fix_imports() {
+  curr_import_name=$(echo "${1}" | sed -E "s/.*\/(.*)\.py$/\1/")
+
+  echo "Fixing top level imports for ${curr_import_name} ... "
+  grep --include="*.py" -rnl "${REPO_NAME}/" -e "import ${curr_import_name}" | xargs -i@ sed -i "s/^import ${curr_import_name} /import ${REPO_NAME}.${curr_import_name} /g" @
+
+  echo "Fixing from imports for ${curr_import_name} ... "
+  grep --include="*.py" -rnl "${REPO_NAME}/" -e "from ${curr_import_name} " | xargs -i@ sed -i "s/^from ${curr_import_name} /from ${REPO_NAME}.${curr_import_name} /g" @
+
 }
 
 __build_setup() {
@@ -136,9 +153,16 @@ __test_build() {
     echo "FAILED TO INSTALL ${whl_file} (status=${package_was_installed})" 1>&2
     return 13
   fi
+
+  echo "Example change in imports .... for a file backbone.py"
+  grep --include="*.py" -rn "${PACKAGE_TEST_DIR}/${REPO_NAME}/" -e "from yolact.backbone" || return 1
+
+  echo "Example change in imports .... for a folder utils"
+  grep --include="*.py" -rn "${PACKAGE_TEST_DIR}/${REPO_NAME}/" -e "from yolact.utils" || return 1
 }
 
 __teardown() {
+  echo "Removing ${PACKAGE_TEST_DIR} ... "
   rm --recursive --force "${PACKAGE_TEST_DIR}" || return 12
 }
 

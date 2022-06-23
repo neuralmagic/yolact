@@ -1,5 +1,6 @@
-import setuptools
 import os
+import setuptools
+from setuptools import find_packages
 
 
 def read_requirements():
@@ -9,15 +10,10 @@ def read_requirements():
 
 
 def packages():
-    return [
-        'yolact',
-        'yolact.data',
-        'yolact.external',
-        'yolact.layers',
-        'yolact.scripts',
-        'yolact.utils',
-        'yolact.web',
-    ]
+    return find_packages(
+        exclude=["*.__pycache__.*"]
+    )
+
 
 
 setuptools.setup(
