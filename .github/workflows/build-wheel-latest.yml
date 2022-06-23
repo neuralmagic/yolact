@@ -6,6 +6,7 @@ on:
     branches:
       - "master"
       - "yolact-dev"
+      - "yolact-entry-points"
 
 jobs:
   build-wheel:

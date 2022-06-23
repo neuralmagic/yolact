@@ -1393,11 +1393,11 @@ def get_engine(model_filepath: str, engine=None):
     )
 
 
-if __name__ == '__main__':
+def main():
+    global args
     parse_args()
     if args.config is not None:
         set_cfg(args.config)
-
     if args.trained_model == 'interrupt':
         args.trained_model = SavePath.get_interrupt('weights/')
     elif args.trained_model == 'latest':
@@ -1407,18 +1407,14 @@ if __name__ == '__main__':
             args.trained_model = get_checkpoint_from_stub(args.trained_model)
         else:
             args.trained_model = get_model_onnx_from_stub(args.trained_model)
-
     args.engine = get_engine(
         model_filepath=args.trained_model,
         engine=args.engine,
     )
-
     if args.detect:
         cfg.eval_mask_branch = False
-
     if args.dataset is not None:
         set_dataset(args.dataset)
-
     with torch.no_grad():
         if not os.path.exists('results'):
             os.makedirs('results')
@@ -1442,14 +1438,16 @@ if __name__ == '__main__':
 
         if args.image is None and args.video is None and args.images is None:
             if not args.benchmark:
-                dataset = COCODetection(cfg.dataset.valid_images, cfg.dataset.valid_info,
-                                    transform=BaseTransform(), has_gt=cfg.dataset.has_gt)
+                dataset = COCODetection(cfg.dataset.valid_images,
+                                        cfg.dataset.valid_info,
+                                        transform=BaseTransform(),
+                                        has_gt=cfg.dataset.has_gt)
                 prep_coco_cats()
             else:
                 zoo_model = zoo_yolo_v3()
                 dataset = load_numpy_list(zoo_model.data_originals.downloaded_path())
         else:
-            dataset = None        
+            dataset = None
 
         print('Loading model...', end='')
 
@@ -1459,7 +1457,8 @@ if __name__ == '__main__':
                                     batch_size=args.batch_size
                                     )
         elif args.engine == Engine.ORT:
-            net = ORTWrapper(filepath=args.trained_model, cfg=cfg, batch_size = args.batch_size)
+            net = ORTWrapper(filepath=args.trained_model, cfg=cfg,
+                             batch_size=args.batch_size)
         else:
             net = Yolact()
             net.load_checkpoint(args.trained_model)
@@ -1470,5 +1469,9 @@ if __name__ == '__main__':
             net = net.cuda()
 
         evaluate(net, dataset)
+
+
+if __name__ == '__main__':
+    main()
 
 

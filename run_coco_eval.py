@@ -18,32 +18,31 @@ parser.add_argument('--eval_type',     default='both', choices=['bbox', 'mask', 
 args = parser.parse_args()
 
 
-
-if __name__ == '__main__':
-
+def main():
 	eval_bbox = (args.eval_type in ('bbox', 'both'))
 	eval_mask = (args.eval_type in ('mask', 'both'))
-
 	print('Loading annotations...')
 	gt_annotations = COCO(args.gt_ann_file)
 	if eval_bbox:
 		bbox_dets = gt_annotations.loadRes(args.bbox_det_file)
 	if eval_mask:
 		mask_dets = gt_annotations.loadRes(args.mask_det_file)
-
 	if eval_bbox:
 		print('\nEvaluating BBoxes:')
 		bbox_eval = COCOeval(gt_annotations, bbox_dets, 'bbox')
 		bbox_eval.evaluate()
 		bbox_eval.accumulate()
 		bbox_eval.summarize()
-	
 	if eval_mask:
 		print('\nEvaluating Masks:')
 		bbox_eval = COCOeval(gt_annotations, mask_dets, 'segm')
 		bbox_eval.evaluate()
 		bbox_eval.accumulate()
 		bbox_eval.summarize()
+
+
+if __name__ == '__main__':
+	main()
 
 
 
