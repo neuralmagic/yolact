@@ -13,7 +13,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
       - name: Build wheel
-        run: | 
+        run: |
           ./build_wheel.sh
           echo "::set-output name=wheel_path::$(ls dist/*.whl)"
           echo "::set-output name=wheel_name::$(basename $(ls dist/*.whl))"
