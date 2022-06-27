@@ -95,15 +95,22 @@ __fix_requirements() {
   echo "Fixing ${REQUIREMENTS_FILE} ... "
   sed -i '/^sparseml/d' "${REPO_NAME}/${REQUIREMENTS_FILE}"
 
+  yolact_file=".*yolact.py"
+  echo "Fixing file level imports ... "
+  find "${REPO_NAME}" -maxdepth 1 -type f -name "*${PYTHON_EXTENSION}" -print0 | while read -r -d $'\0' file; do
+    echo "file is $file"
+    if ! [[ "${file}" =~ $yolact_file ]]; then
+      __fix_imports "${file}"
+    fi
+  done
+
   echo "Fixing folder level imports ... "
   for folder in "${NEEDED_FOLDERS[@]}"; do
     __fix_imports "${folder}"
   done
 
-  echo "Fixing file level imports ... "
-  find "${REPO_NAME}" -maxdepth 1 -type f -name "*${PYTHON_EXTENSION}" -print0 | while read -r -d $'\0' file; do
-    __fix_imports "${file}"
-  done
+  echo "Fixing special case (yolact.py) imports ... "
+  grep --include="*.py" -rnl "${REPO_NAME}/" -e '\(from\|import\) yolact ' | xargs -i@ sed -E -i "s/^(from|import) yolact /\1 ${REPO_NAME}.yolact /g" @
 
 }
 
@@ -114,7 +121,7 @@ __fix_imports() {
   grep --include="*.py" -rnl "${REPO_NAME}/" -e "import ${curr_import_name}" | xargs -i@ sed -i "s/^import ${curr_import_name} /import ${REPO_NAME}.${curr_import_name} /g" @
 
   echo "Fixing from imports for ${curr_import_name} ... "
-  grep --include="*.py" -rnl "${REPO_NAME}/" -e "from ${curr_import_name} " | xargs -i@ sed -i "s/^from ${curr_import_name} /from ${REPO_NAME}.${curr_import_name} /g" @
+  grep --include="*.py" -rnl "${REPO_NAME}/" -e "from ${curr_import_name}" | xargs -i@ sed -E -i "s/^from ${curr_import_name}([\\.| ])/from ${REPO_NAME}.${curr_import_name}\1/g" @
 
 }
 
