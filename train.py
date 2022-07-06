@@ -196,6 +196,14 @@ parser.add_argument('--keep_latest_interval', default=100000, type=int,
                     help='When --keep_latest is on, don\'t delete the latest file at these intervals. This should be a multiple of save_interval or 0.')
 parser.add_argument('--dataset', default=None, type=str,
                     help='If specified, override the dataset specified in the config with this one (example: coco2017_dataset).')
+parser.add_argument('--train_info', default=None, type=str,
+                    help='If specified, override the train info json  path specified in the config with this one.')
+parser.add_argument('--validation_info', default=None, type=str,
+                    help='If specified, override the validation info json  path specified in the config with this one.')
+parser.add_argument('--train_images', default=None, type=str,
+                    help='If specified, override the train images  path specified in the config with this one.')
+parser.add_argument('--validation_images', default=None, type=str,
+                    help='If specified, override the validation images path path specified in the config with this one.')
 parser.add_argument('--no_log', dest='log', action='store_false',
                     help='Don\'t log per iteration information into log_folder.')
 parser.add_argument('--log_gpu', dest='log_gpu', action='store_true',
@@ -314,12 +322,19 @@ def train():
     if not os.path.exists(args.save_folder):
         os.mkdir(args.save_folder)
 
+    cfg.dataset.train_images = args.train_images or cfg.dataset.train_images
+    cfg.dataset.train_info = args.train_info or cfg.dataset.train_info
+
     dataset = COCODetection(image_path=cfg.dataset.train_images,
                             info_file=cfg.dataset.train_info,
                             transform=SSDAugmentation(MEANS))
-    
+
+
     if args.validation_epoch > 0:
         setup_eval()
+        cfg.dataset.valid_images = args.train_images or cfg.dataset.valid_images
+        cfg.dataset.valid_info = args.train_info or cfg.dataset.valid_info
+
         val_dataset = COCODetection(image_path=cfg.dataset.valid_images,
                                     info_file=cfg.dataset.valid_info,
                                     transform=BaseTransform(MEANS))
