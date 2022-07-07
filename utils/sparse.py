@@ -45,15 +45,15 @@ class SparseMLWrapper(object):
         if not self.enabled or rank not in [-1, 0]:
             return
 
-        def _logging_lambda(log_tag, log_val, log_vals, step, walltime):
+        def _logging_lambda(tag, value, values, step, wall_time, **kwargs):
             if not wandb_logger or not wandb_available:
                 return
 
-            if log_val is not None:
-                wandb.log({log_tag: log_val})
+            if value is not None:
+                wandb.log({tag: value})
 
-            if log_vals:
-                wandb.log(log_vals)
+            if values:
+                wandb.log(values)
 
         self.manager.initialize_loggers([
             SparsificationGroupLogger(
