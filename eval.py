@@ -1393,7 +1393,8 @@ def get_engine(model_filepath: str, engine=None):
     )
 
 
-if __name__ == '__main__':
+def main():
+    global args
     parse_args()
     if args.config is not None:
         set_cfg(args.config)
@@ -1442,14 +1443,16 @@ if __name__ == '__main__':
 
         if args.image is None and args.video is None and args.images is None:
             if not args.benchmark:
-                dataset = COCODetection(cfg.dataset.valid_images, cfg.dataset.valid_info,
-                                    transform=BaseTransform(), has_gt=cfg.dataset.has_gt)
+                dataset = COCODetection(cfg.dataset.valid_images,
+                                        cfg.dataset.valid_info,
+                                        transform=BaseTransform(),
+                                        has_gt=cfg.dataset.has_gt)
                 prep_coco_cats()
             else:
                 zoo_model = zoo_yolo_v3()
                 dataset = load_numpy_list(zoo_model.data_originals.downloaded_path())
         else:
-            dataset = None        
+            dataset = None
 
         print('Loading model...', end='')
 
@@ -1459,7 +1462,8 @@ if __name__ == '__main__':
                                     batch_size=args.batch_size
                                     )
         elif args.engine == Engine.ORT:
-            net = ORTWrapper(filepath=args.trained_model, cfg=cfg, batch_size = args.batch_size)
+            net = ORTWrapper(filepath=args.trained_model, cfg=cfg,
+                             batch_size=args.batch_size)
         else:
             net = Yolact()
             net.load_checkpoint(args.trained_model)
@@ -1470,5 +1474,9 @@ if __name__ == '__main__':
             net = net.cuda()
 
         evaluate(net, dataset)
+
+
+if __name__ == '__main__':
+    main()
 
 
