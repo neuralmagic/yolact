@@ -33,6 +33,7 @@ def main():
 		bbox_eval.evaluate()
 		bbox_eval.accumulate()
 		bbox_eval.summarize()
+    
 	if eval_mask:
 		print('\nEvaluating Masks:')
 		bbox_eval = COCOeval(gt_annotations, mask_dets, 'segm')
