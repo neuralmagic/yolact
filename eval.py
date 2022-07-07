@@ -1398,6 +1398,7 @@ def main():
     parse_args()
     if args.config is not None:
         set_cfg(args.config)
+
     if args.trained_model == 'interrupt':
         args.trained_model = SavePath.get_interrupt('weights/')
     elif args.trained_model == 'latest':
@@ -1407,14 +1408,18 @@ def main():
             args.trained_model = get_checkpoint_from_stub(args.trained_model)
         else:
             args.trained_model = get_model_onnx_from_stub(args.trained_model)
+
     args.engine = get_engine(
         model_filepath=args.trained_model,
         engine=args.engine,
     )
+
     if args.detect:
         cfg.eval_mask_branch = False
+
     if args.dataset is not None:
         set_dataset(args.dataset)
+
     with torch.no_grad():
         if not os.path.exists('results'):
             os.makedirs('results')
