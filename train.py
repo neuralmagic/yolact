@@ -332,8 +332,8 @@ def train():
 
     if args.validation_epoch > 0:
         setup_eval()
-        cfg.dataset.valid_images = args.train_images or cfg.dataset.valid_images
-        cfg.dataset.valid_info = args.train_info or cfg.dataset.valid_info
+        cfg.dataset.valid_images = args.validation_images or cfg.dataset.valid_images
+        cfg.dataset.valid_info = args.validation_info or cfg.dataset.valid_info
 
         val_dataset = COCODetection(image_path=cfg.dataset.valid_images,
                                     info_file=cfg.dataset.valid_info,
