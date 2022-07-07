@@ -1,5 +1,6 @@
 import contextlib
 import logging
+from typing import Optional, Union
 
 import torch.nn as nn
 from sparseml.pytorch.optim import ScheduledModifierManager
@@ -19,7 +20,22 @@ def is_parallel(model):
 
 
 class SparseMLWrapper(object):
-    def __init__(self, model, recipe, checkpoint_recipe=None, checkpoint_epoch=float('inf')):
+    """
+    A wrapper for sparsification of Yolact models with SparseML
+
+    :param model: The model to sparsify
+    :param recipe: SparseZoo stub or path to a local training recipe
+    :param checkpoint_recipe: A checkpoint recipe if present
+    :param checkpoint_epoch: The epoch contained in the checkpoint if any,
+        defaults to float('inf')
+    """
+    def __init__(
+        self,
+        model: "Module",
+        recipe: str,
+        checkpoint_recipe: Optional[str] = None,
+        checkpoint_epoch: Union[int, float] = float('inf'),
+    ):
         self.enabled = bool(recipe)
         self.model = model.module if is_parallel(model) else model
         self.recipe = recipe
@@ -34,20 +50,31 @@ class SparseMLWrapper(object):
         if self.checkpoint_recipe_manager:
             _LOGGER.info("Applying structure from checkpoint recipe")
             self.checkpoint_recipe_manager.apply_structure(
-            module=model,
-            epoch=checkpoint_epoch,
+                module=model,
+                epoch=checkpoint_epoch,
         )
 
     def state_dict(self):
+        """
+        :return: A dict object with compsed recipe
+        """
         return {
             'recipe': str(self.compose_recipes()) if self.enabled else None,
         }
 
     def apply(self):
+        """
+        Apply training recipe to model
+        """
         if self.enabled:
             self.manager.apply(self.model)
 
-    def initialize(self, start_epoch):
+    def initialize(self, start_epoch: Union[int, float]):
+        """
+        Initialize manager to a epoch
+
+        :param start_epoch: The epoch to initialize manager at
+        """
         if self.enabled:
             self.manager.initialize(self.model, start_epoch)
 
@@ -111,7 +138,12 @@ class SparseMLWrapper(object):
         return self.enabled and self.manager.learning_rate_modifiers
 
     def check_epoch_override(self, epochs):
-        # Override num epochs if recipe explicitly modifies epoch range
+        """
+        Override num epochs if recipe explicitly modifies epoch range
+
+        :param epochs: potential epoch candidate to override
+        :return: The max epoch number to use
+        """
         if self.enabled and self.manager.epoch_modifiers and \
                 self.manager.max_epochs:
             epochs = self.manager.max_epochs or epochs  # override num_epochs
@@ -122,6 +154,10 @@ class SparseMLWrapper(object):
         return epochs
 
     def qat_active(self, epoch):
+        """
+        :param epoch: Epoch number to test for
+        :return: True if qat active at specified epoch else False
+        """
         if self.enabled and self.manager.quantization_modifiers:
             qat_start = min(
                 [mod.start_epoch for mod in self.manager.quantization_modifiers]

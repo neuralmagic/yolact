@@ -483,9 +483,17 @@ class Yolact(nn.Module):
                      }
         torch.save(checkpoint, path)
 
-    def load_checkpoint(self, path, train_recipe=None, resume: bool = False) -> Tuple[Optional[int], Optional[str], SparseMLWrapper]:
+    def load_checkpoint(
+        self,
+        path: str,
+        train_recipe: Optional[str] = None,
+        resume: bool = False,
+    ) -> Tuple[Optional[int], Optional[str], SparseMLWrapper]:
         """ Loads weights into the current Yolact object.
 
+        :param path: local path to the checkpoint
+        :param train_recipe: A train recipe if different from checkpoint recipe
+        :param resume: True if resuming a last run
         :return: A tuple containing the epoch and the checkpoint_recipe if
             found in the checkpoint, and a SparseML Wrapper instance
         """
