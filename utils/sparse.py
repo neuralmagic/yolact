@@ -56,7 +56,7 @@ class SparseMLWrapper(object):
 
     def state_dict(self):
         """
-        :return: A dict object with compsed recipe
+        :return: A dict object with composed recipe
         """
         return {
             'recipe': str(self.compose_recipes()) if self.enabled else None,
@@ -137,7 +137,7 @@ class SparseMLWrapper(object):
     def should_override_scheduler(self):
         return self.enabled and self.manager.learning_rate_modifiers
 
-    def check_epoch_override(self, epochs):
+    def check_epoch_override(self, epochs) -> Union[int, float]:
         """
         Override num epochs if recipe explicitly modifies epoch range
 
@@ -153,7 +153,7 @@ class SparseMLWrapper(object):
 
         return epochs
 
-    def qat_active(self, epoch):
+    def qat_active(self, epoch) -> bool:
         """
         :param epoch: Epoch number to test for
         :return: True if qat active at specified epoch else False
