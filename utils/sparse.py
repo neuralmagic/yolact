@@ -177,6 +177,6 @@ class SparseMLWrapper(object):
             return self.manager
 
         return self.manager.compose_staged(
-            base_recipe=self.recipe, additional_recipe=self.checkpoint_recipe_manager,
+            base_recipe=self.checkpoint_recipe_manager, additional_recipe=self.recipe,
         )
 
