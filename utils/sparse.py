@@ -1,6 +1,6 @@
 import contextlib
 import logging
-from typing import Optional, Union
+from typing import Dict, Optional, Union
 
 import torch.nn as nn
 from sparseml.pytorch.optim import ScheduledModifierManager
@@ -35,12 +35,14 @@ class SparseMLWrapper(object):
         recipe: str,
         checkpoint_recipe: Optional[str] = None,
         checkpoint_epoch: Union[int, float] = float('inf'),
+        metadata: Optional[Dict[str, any]] = None,
     ):
         self.enabled = bool(recipe)
         self.model = model.module if is_parallel(model) else model
         self.recipe = recipe
         self.manager = ScheduledModifierManager.from_yaml(
-            recipe
+            file_path=recipe,
+            metadata=metadata,
         ) if self.enabled else None
         self.logger = None
         self.checkpoint_recipe_manager = ScheduledModifierManager.from_yaml(
