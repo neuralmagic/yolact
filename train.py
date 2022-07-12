@@ -455,6 +455,10 @@ def train():
 
     # try-except so you can use ctrl+c to save early and stop training
     # SparseML Integration
+    last_stage_epoch = 0
+
+    if sparseml_wrapper.checkpoint_recipe_manager:
+        last_stage_epoch = sparseml_wrapper.checkpoint_recipe_manager.max_epochs or 0
 
     try:
         for epoch in range(start_epoch, num_epochs):
@@ -573,7 +577,7 @@ def train():
                     yolact_net.save_checkpoint(
                         save_path(epoch, iteration),
                         recipe=sparseml_wrapper.state_dict().get('recipe'),
-                        epoch=epoch,
+                        epoch=epoch + last_stage_epoch,
                     )
 
                     if args.keep_latest and latest is not None:
@@ -597,14 +601,14 @@ def train():
             yolact_net.save_checkpoint(
                 save_path(epoch, repr(iteration) +'_interrupt'),
                 recipe=sparseml_wrapper.state_dict().get('recipe'),
-                epoch=epoch,
+                epoch=epoch + last_stage_epoch,
             )
         exit()
 
     yolact_net.save_checkpoint(
         save_path(epoch, iteration),
         recipe=sparseml_wrapper.state_dict().get('recipe'),
-        epoch=epoch,
+        epoch=epoch + last_stage_epoch,
     )
     # Compute validation mAP after training is finished
     print("Computing val mAP after training:")
