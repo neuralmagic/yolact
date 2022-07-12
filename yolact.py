@@ -6,7 +6,7 @@ from torchvision.models.resnet import Bottleneck
 import numpy as np
 from itertools import product
 from math import sqrt
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 from collections import defaultdict
 
 from data.config import cfg, mask_type
@@ -488,12 +488,14 @@ class Yolact(nn.Module):
         path: str,
         train_recipe: Optional[str] = None,
         resume: bool = False,
+        metadata: Optional[Dict[str, any]] = None,
     ) -> Tuple[Optional[int], Optional[str], SparseMLWrapper]:
         """ Loads weights into the current Yolact object.
 
         :param path: local path to the checkpoint
         :param train_recipe: A train recipe if different from checkpoint recipe
         :param resume: True if resuming a last run
+        :param metadata: Optional metadata to be stored with recipe
         :return: A tuple containing the epoch and the checkpoint_recipe if
             found in the checkpoint, and a SparseML Wrapper instance
         """
@@ -508,6 +510,7 @@ class Yolact(nn.Module):
             recipe=train_recipe,
             checkpoint_recipe=checkpoint_recipe,
             checkpoint_epoch=float('inf') if not resume else checkpoint_epoch,
+            metadata=metadata,
         )
 
         # For backward compatability, remove these (the new variable is called layers)

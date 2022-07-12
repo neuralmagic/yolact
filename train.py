@@ -122,6 +122,7 @@ Some Useful Model Stubs:
 
 """
 import logging
+from pathlib import Path
 
 from sparseml.pytorch.utils import TensorBoardLogger
 from torch.cuda import amp
@@ -344,6 +345,13 @@ def train():
     net = yolact_net
     net.train()
 
+    metadata = {
+        "batch_size": args.batch_size,
+        "train_info": Path(cfg.dataset.train_info).name,
+        "validation_info": Path(cfg.dataset.valid_info).name,
+        "config": cfg.name,
+    }
+
     if args.log:
         log = Log(cfg.name, args.log_folder, dict(args._get_kwargs()),
             overwrite=(args.resume is None), log_gpu_stats=args.log_gpu)
@@ -371,6 +379,7 @@ def train():
             path=args.resume,
             train_recipe=args.recipe,
             resume=args.cont,
+            metadata=metadata,
         )
         args.recipe = train_recipe
         if args.start_iter == -1:
@@ -381,6 +390,7 @@ def train():
         sparseml_wrapper = SparseMLWrapper(
             model=yolact_net,
             recipe=args.recipe,
+            metadata=metadata,
         )
         # A new run always starts from epoch 0
         sparseml_wrapper.initialize(start_epoch=0)
