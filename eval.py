@@ -1141,17 +1141,19 @@ def evalvideo(net:Yolact, path:str, out_path:str=None):
     cleanup_and_exit()
 
 
-def load_benchmark_batch(dataset, image_idx):
+def load_benchmark_batch(dataset, image_idx, use_cuda = False):
     img = dataset[image_idx]['arr_0']
     TARGET_SIZE = 550, 550
-    img = cv2.resize(img, TARGET_SIZE)
+    img = cv2.resize(img.transpose(1,2,0), TARGET_SIZE)
     img = np.moveaxis(img, -1, 0) # put channels in front
     _, h, w = img.shape
     batch = torch.from_numpy(np.ascontiguousarray(img[np.newaxis], dtype=np.float32))
+    if use_cuda:
+        batch = batch.to(device)
     return batch, h, w
 
 
-def evaluate(net:Yolact, dataset, train_mode=False):
+def evaluate(net:Yolact, dataset, use_cuda = False, train_mode=False):
     net.detect.use_fast_nms = args.fast_nms
     net.detect.use_cross_class_nms = args.cross_class_nms
     cfg.mask_proto_debug = args.mask_proto_debug
@@ -1239,7 +1241,7 @@ def evaluate(net:Yolact, dataset, train_mode=False):
                                                                        image_idx)
                 else:
 
-                    batch, h, w = load_benchmark_batch(dataset, image_idx)
+                    batch, h, w = load_benchmark_batch(dataset, image_idx, use_cuda)
                     gt, gt_masks, num_crowd, img = None, None, None, None
                 if args.batch_size > 1:
                     # build batch
@@ -1409,12 +1411,12 @@ def main():
         args.trained_model = SavePath.get_latest('weights/', cfg.name)
     elif is_valid_stub(args.trained_model):
         if args.engine == 'torch':
-            args.trained_model = get_checkpoint_from_stub(args.trained_model)
+            trained_model_weights = get_checkpoint_from_stub(args.trained_model)
         else:
-            args.trained_model = get_model_onnx_from_stub(args.trained_model)
+            trained_model_weights = get_model_onnx_from_stub(args.trained_model)
 
     args.engine = get_engine(
-        model_filepath=args.trained_model,
+        model_filepath=trained_model_weights,
         engine=args.engine,
     )
 
@@ -1464,23 +1466,23 @@ def main():
         print('Loading model...', end='')
 
         if args.engine == Engine.DEEPSPARSE:
-            net = DeepSparseWrapper(filepath=args.trained_model, cfg=cfg,
+            net = DeepSparseWrapper(filepath=trained_model_weights, cfg=cfg,
                                     num_cores=args.num_cores,
                                     batch_size=args.batch_size
                                     )
         elif args.engine == Engine.ORT:
-            net = ORTWrapper(filepath=args.trained_model, cfg=cfg,
+            net = ORTWrapper(filepath=trained_model_weights, cfg=cfg,
                              batch_size=args.batch_size)
         else:
             net = Yolact()
-            net.load_checkpoint(args.trained_model)
+            net.load_checkpoint(trained_model_weights)
             net.eval()
         print(' Done.')
 
         if args.cuda:
             net = net.cuda()
 
-        evaluate(net, dataset)
+        evaluate(net, dataset, args.cuda)
 
 
 if __name__ == '__main__':
