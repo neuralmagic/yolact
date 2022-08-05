@@ -880,7 +880,6 @@ def evalimages(net:Yolact, input_folder:str, output_folder:str):
     if not os.path.exists(output_folder):
         os.mkdir(output_folder)
 
-    print()
     for p in Path(input_folder).glob('*'): 
         path = str(p)
         name = os.path.basename(path)
@@ -1141,19 +1140,19 @@ def evalvideo(net:Yolact, path:str, out_path:str=None):
     cleanup_and_exit()
 
 
-def load_benchmark_batch(dataset, image_idx, use_cuda = True):
+def load_benchmark_batch(dataset, image_idx, device):
     img = dataset[image_idx]['arr_0']
     TARGET_SIZE = 550, 550
     img = cv2.resize(img.transpose(1,2,0), TARGET_SIZE)
     img = np.moveaxis(img, -1, 0) # put channels in front
     _, h, w = img.shape
     batch = torch.from_numpy(np.ascontiguousarray(img[np.newaxis], dtype=np.float32))
-    if use_cuda:
-        batch = batch.to(device)
+    batch = batch.to(device)
+
     return batch, h, w
 
 
-def evaluate(net:Yolact, dataset, use_cuda = True, train_mode=False):
+def evaluate(net:Yolact, dataset, device, train_mode=False):
     net.detect.use_fast_nms = args.fast_nms
     net.detect.use_cross_class_nms = args.cross_class_nms
     cfg.mask_proto_debug = args.mask_proto_debug
@@ -1239,7 +1238,7 @@ def evaluate(net:Yolact, dataset, use_cuda = True, train_mode=False):
                                                                        image_idx)
                 else:
 
-                    batch, h, w = load_benchmark_batch(dataset, image_idx, use_cuda)
+                    batch, h, w = load_benchmark_batch(dataset, image_idx, device)
                     gt, gt_masks, num_crowd, img = None, None, None, None
                 if args.batch_size > 1:
                     # build batch
@@ -1483,7 +1482,7 @@ def main():
         if args.cuda:
             net = net.cuda()
 
-        evaluate(net, dataset, args.cuda)
+        evaluate(net, dataset, device)
 
 
 if __name__ == '__main__':
