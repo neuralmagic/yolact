@@ -1141,7 +1141,7 @@ def evalvideo(net:Yolact, path:str, out_path:str=None):
     cleanup_and_exit()
 
 
-def load_benchmark_batch(dataset, image_idx, use_cuda = False):
+def load_benchmark_batch(dataset, image_idx, use_cuda = True):
     img = dataset[image_idx]['arr_0']
     TARGET_SIZE = 550, 550
     img = cv2.resize(img.transpose(1,2,0), TARGET_SIZE)
@@ -1153,7 +1153,7 @@ def load_benchmark_batch(dataset, image_idx, use_cuda = False):
     return batch, h, w
 
 
-def evaluate(net:Yolact, dataset, use_cuda = False, train_mode=False):
+def evaluate(net:Yolact, dataset, use_cuda = True, train_mode=False):
     net.detect.use_fast_nms = args.fast_nms
     net.detect.use_cross_class_nms = args.cross_class_nms
     cfg.mask_proto_debug = args.mask_proto_debug
@@ -1180,8 +1180,6 @@ def evaluate(net:Yolact, dataset, use_cuda = False, train_mode=False):
 
     frame_times = MovingAverage()
     dataset_size = len(dataset) if args.max_images < 0 else min(args.max_images, len(dataset))
-
-    print()
 
     if not args.display and not args.benchmark:
         # For each class and iou, stores tuples (score, isPositive)
@@ -1406,9 +1404,9 @@ def main():
         set_cfg(args.config)
 
     if args.trained_model == 'interrupt':
-        args.trained_model = SavePath.get_interrupt('weights/')
+        trained_model_weights = SavePath.get_interrupt('weights/')
     elif args.trained_model == 'latest':
-        args.trained_model = SavePath.get_latest('weights/', cfg.name)
+        trained_model_weights= SavePath.get_latest('weights/', cfg.name)
     elif is_valid_stub(args.trained_model):
         if args.engine == 'torch':
             trained_model_weights = get_checkpoint_from_stub(args.trained_model)
@@ -1458,6 +1456,9 @@ def main():
                                         has_gt=cfg.dataset.has_gt)
                 prep_coco_cats()
             else:
+                if not is_valid_stub(args.trained_model):
+                    raise ValueError("Attempting to create a dataset from sparsezoo model. Expected to "
+                                     f"receive a sparsezoo stub, but received instead: {args.trained_model}")
                 zoo_model = Model(args.trained_model)
                 dataset = load_numpy_list(zoo_model.sample_inputs.path)
         else:
