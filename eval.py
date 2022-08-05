@@ -1423,6 +1423,8 @@ def main():
     if args.dataset is not None:
         set_dataset(args.dataset)
 
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
     with torch.no_grad():
         if not os.path.exists('results'):
             os.makedirs('results')
