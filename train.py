@@ -2,19 +2,21 @@
 Script to Train YOLACT models
 
 ####################
-usage: train.py [-h] [--batch_size BATCH_SIZE] [--resume RESUME]
-                [--ckpt CKPT] [--start_iter START_ITER]
-                [--num_workers NUM_WORKERS] [--cuda CUDA] [--lr LR]
-                [--momentum MOMENTUM] [--decay DECAY] [--gamma GAMMA]
-                [--save_folder SAVE_FOLDER] [--log_folder LOG_FOLDER]
-                [--config CONFIG] [--save_interval SAVE_INTERVAL]
+usage: train.py [-h] [--batch_size BATCH_SIZE] [--resume RESUME] [--ckpt CKPT]
+                [--start_iter START_ITER] [--num_workers NUM_WORKERS]
+                [--cuda CUDA] [--lr LR] [--momentum MOMENTUM] [--decay DECAY]
+                [--gamma GAMMA] [--save_folder SAVE_FOLDER]
+                [--log_folder LOG_FOLDER] [--config CONFIG]
+                [--save_interval SAVE_INTERVAL]
                 [--validation_size VALIDATION_SIZE]
                 [--validation_epoch VALIDATION_EPOCH] [--keep_latest]
                 [--keep_latest_interval KEEP_LATEST_INTERVAL]
-                [--dataset DATASET] [--no_log] [--log_gpu] [--no_interrupt]
-                [--batch_alloc BATCH_ALLOC] [--no_autoscale]
-                [--recipe RECIPE]
-                [--use_checkpoint_epoch USE_CHECKPOINT_EPOCH]
+                [--dataset DATASET] [--train_info TRAIN_INFO]
+                [--validation_info VALIDATION_INFO]
+                [--train_images TRAIN_IMAGES]
+                [--validation_images VALIDATION_IMAGES] [--no_log] [--log_gpu]
+                [--backbone] [--no_interrupt] [--batch_alloc BATCH_ALLOC]
+                [--no_autoscale] [--recipe RECIPE] [--use_checkpoint_epoch]
                 [--fp16] [--wandb] [--cont]
 
 Yolact Training Script
@@ -23,13 +25,13 @@ optional arguments:
   -h, --help            show this help message and exit
   --batch_size BATCH_SIZE
                         Batch size for training
-  --resume RESUME       Checkpoint state_dict file to resume training from.
-                        If this is "interrupt", the model will resume
-                        training from the interrupt file. Can also be set
-                        to True;along with the --ckpt argument to resume
-                        training from a SparseZoo stub or local checkpoint
-  --ckpt CKPT           Path to a Yolact checkpoint/SparseZoo stub used
-                        only if --resume is True
+  --resume RESUME       Checkpoint state_dict file to resume training from. If
+                        this is "interrupt", the model will resume training
+                        from the interrupt file. Can also be set to True;along
+                        with the --ckpt argument to resume training from a
+                        SparseZoo stub or local checkpoint
+  --ckpt CKPT           Path to a Yolact checkpoint/SparseZoo stub used only
+                        if --resume is True
   --start_iter START_ITER
                         Resume training at this iter. If this is -1, the
                         iteration will be determined from the file name.
@@ -38,59 +40,70 @@ optional arguments:
                         Number of workers used in dataloading
   --cuda CUDA           Use CUDA to train model
   --lr LR, --learning_rate LR
-                        Initial learning rate. Leave as None to read this
-                        from the config.
-  --momentum MOMENTUM   Momentum for SGD. Leave as None to read this from
+                        Initial learning rate. Leave as None to read this from
                         the config.
+  --momentum MOMENTUM   Momentum for SGD. Leave as None to read this from the
+                        config.
   --decay DECAY, --weight_decay DECAY
-                        Weight decay for SGD. Leave as None to read this
-                        from the config.
-  --gamma GAMMA         For each lr step, what to multiply the lr by. Leave
-                        as None to read this from the config.
+                        Weight decay for SGD. Leave as None to read this from
+                        the config.
+  --gamma GAMMA         For each lr step, what to multiply the lr by. Leave as
+                        None to read this from the config.
   --save_folder SAVE_FOLDER
                         Directory for saving checkpoint models.
   --log_folder LOG_FOLDER
                         Directory for saving logs.
   --config CONFIG       The config object to use. Defaults to
-                        yolact_darknet53_config (for DarkNet-53 backbone)
+                        yolact_darknet53_config (for DarkNet-53 backbone).
+                        Note: Only DarkNet-53 backbone supported
   --save_interval SAVE_INTERVAL
                         The number of iterations between saving the model.
   --validation_size VALIDATION_SIZE
                         The number of images to use for validation.
   --validation_epoch VALIDATION_EPOCH
-                        Output validation information every n iterations.
-                        If -1, do no validation.
-  --keep_latest         Only keep the latest checkpoint instead of each
-                        one.
+                        Output validation information every n iterations. If
+                        -1, do no validation.
+  --keep_latest         Only keep the latest checkpoint instead of each one.
   --keep_latest_interval KEEP_LATEST_INTERVAL
-                        When --keep_latest is on, don't delete the latest
-                        file at these intervals. This should be a multiple
-                        of save_interval or 0.
+                        When --keep_latest is on, don't delete the latest file
+                        at these intervals. This should be a multiple of
+                        save_interval or 0.
   --dataset DATASET     If specified, override the dataset specified in the
                         config with this one (example: coco2017_dataset).
-  --no_log              Don't log per iteration information into
-                        log_folder.
-  --log_gpu             Include GPU information in the logs. Nvidia-smi
-                        tends to be slow, so set this with caution.
+  --train_info TRAIN_INFO
+                        If specified, override the train info json path
+                        specified in the config with this one.
+  --validation_info VALIDATION_INFO
+                        If specified, override the validation info json path
+                        specified in the config with this one.
+  --train_images TRAIN_IMAGES
+                        If specified, override the train images path specified
+                        in the config with this one.
+  --validation_images VALIDATION_IMAGES
+                        If specified, override the validation images path path
+                        specified in the config with this one.
+  --no_log              Don't log per iteration information into log_folder.
+  --log_gpu             Include GPU information in the logs. Nvidia-smi tends
+                        to be slow, so set this with caution.
+  --backbone            Set this flag when starting from a backbone
   --no_interrupt        Don't save an interrupt when KeyboardInterrupt is
                         caught.
   --batch_alloc BATCH_ALLOC
-                        If using multiple GPUS, you can set this to be a
-                        comma separated list detailing which GPUs should
-                        get what local batch size (It should add up to your
-                        total batch size).
-  --no_autoscale        YOLACT will automatically scale the lr and the
-                        number of iterations depending on the batch size.
-                        Set this if you want to disable that.
+                        If using multiple GPUS, you can set this to be a comma
+                        separated list detailing which GPUs should get what
+                        local batch size (It should add up to your total batch
+                        size).
+  --no_autoscale        YOLACT will automatically scale the lr and the number
+                        of iterations depending on the batch size. Set this if
+                        you want to disable that.
   --recipe RECIPE       Path to a sparsification recipe, can also be a
-                        SparseZoo recipe stub, if provided the recipe
-                        stored with the checkpoint is ignored
-  --use_checkpoint_epoch USE_CHECKPOINT_EPOCH
+                        SparseZoo recipe stub, if provided the recipe stored
+                        with the checkpoint is ignored
+  --use_checkpoint_epoch
                         True to to override epoch # saved in the checkpoint.
                         default start epoch is 0
   --fp16                flag to switch off fp16 while training
-  --wandb               Flag to use wandb logging, needs `pip install
-                        wandb`
+  --wandb               Flag to use wandb logging, needs `pip install wandb`
   --cont                Flag to continue application of a halted recipe.
 ####################
 Example Usage:
