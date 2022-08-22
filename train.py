@@ -97,19 +97,40 @@ Example Usage:
 # Start from a pretrained checkpoint and apply a recipe, both resume
 and recipe arguments can be replaced by valid SparseZoo stubs
 
-1) # Using local weights
-python train.py --resume weights/model.pth \
- --recipe recipe.yaml
+1) # Using local yolact weights
+python train.py --resume weights/yolact-model.pth \
+ --recipe recipe.yaml \
+ --train_info ./data/coco/annotations/instances_train2017.json \
+ --validation_info ./data/coco/annotations/instances_val2017.json \
+ --train_images ./data/coco/images \
+ --validation_images ./data/coco/images
 
 2) # Using SparseZoo Stubs
 python train.py --resume \
 zoo:cv/segmentation/yolact-darknet53/pytorch/dbolya/coco/base-none \
---recipe yolact.pruned.perf.md
+ --recipe yolact.pruned.perf.md \
+ --train_info ./data/coco/annotations/instances_train2017.json \
+ --validation_info ./data/coco/annotations/instances_val2017.json \
+ --train_images ./data/coco/images \
+ --validation_images ./data/coco/images
 
 3) # Using SparseZoo Stubs for model and recipe
 python train.py --resume \
 zoo:cv/segmentation/yolact-darknet53/pytorch/dbolya/coco/base-none \
---recipe zoo:cv/segmentation/yolact-darknet53/pytorch/dbolya/coco/pruned90-none
+ --recipe zoo:cv/segmentation/yolact-darknet53/pytorch/dbolya/coco/pruned90-none \
+ --train_info ./data/coco/annotations/instances_train2017.json \
+ --validation_info ./data/coco/annotations/instances_val2017.json \
+ --train_images ./data/coco/images \
+ --validation_images ./data/coco/images
+
+4) # Start from a DarkNet53 backbone and train yolact-baseline
+python train.py --resume weights/darknet53.pth \
+ --recipe zoo:cv/segmentation/yolact-darknet53/pytorch/dbolya/coco/base-none \
+ --train_info ./data/coco/annotations/instances_train2017.json \
+ --validation_info ./data/coco/annotations/instances_val2017.json \
+ --train_images ./data/coco/images \
+ --validation_images ./data/coco/images \
+ --backbone
 
 ####################
 Some Useful Model Stubs:
@@ -184,7 +205,8 @@ parser.add_argument('--save_folder', default='weights/',
 parser.add_argument('--log_folder', default='logs/',
                     help='Directory for saving logs.')
 parser.add_argument('--config', default='yolact_darknet53_config',
-                    help='The config object to use. Defaults to yolact_darknet53_config (for DarkNet-53 backbone)')
+                    help='The config object to use. Defaults to yolact_darknet53_config (for DarkNet-53 backbone). '
+                    'Note: Only DarkNet-53 backbone supported')
 parser.add_argument('--save_interval', default=10000, type=int,
                     help='The number of iterations between saving the model.')
 parser.add_argument('--validation_size', default=5000, type=int,
@@ -209,6 +231,7 @@ parser.add_argument('--no_log', dest='log', action='store_false',
                     help='Don\'t log per iteration information into log_folder.')
 parser.add_argument('--log_gpu', dest='log_gpu', action='store_true',
                     help='Include GPU information in the logs. Nvidia-smi tends to be slow, so set this with caution.')
+parser.add_argument('--backbone', action='store_true', help='Set this flag when starting from a backbone')
 parser.add_argument('--no_interrupt', dest='interrupt', action='store_false',
                     help='Don\'t save an interrupt when KeyboardInterrupt is caught.')
 parser.add_argument('--batch_alloc', default=None, type=str,
@@ -373,7 +396,10 @@ def train():
     elif is_valid_stub(args.resume):
         args.resume = get_checkpoint_from_stub(args.resume)
 
-    if args.resume and args.resume.lower() not in ("no", "false", "f", "0"):
+    if not args.resume:
+        args.backbone = True
+
+    if not args.backbone and args.resume and args.resume.lower() not in ("no", "false", "f", "0"):
         print('Resuming training, loading checkpoint {}...'.format(args.resume))
         start_epoch, train_recipe, sparseml_wrapper = yolact_net.load_checkpoint(
             path=args.resume,
@@ -386,14 +412,16 @@ def train():
             args.start_iter = SavePath.from_str(args.resume).iteration
     else:
         print('Initializing weights...')
-        yolact_net.init_weights(backbone_path=args.save_folder + cfg.backbone.path)
+        backbone_path = (args.save_folder + cfg.backbone.path) if not args.resume else args.resume
+        yolact_net.init_weights(backbone_path=backbone_path)
         sparseml_wrapper = SparseMLWrapper(
             model=yolact_net,
             recipe=args.recipe,
             metadata=metadata,
         )
         # A new run always starts from epoch 0
-        sparseml_wrapper.initialize(start_epoch=0)
+        start_epoch = 0
+        sparseml_wrapper.initialize(start_epoch=start_epoch)
 
     optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=args.momentum,
                           weight_decay=args.decay)
